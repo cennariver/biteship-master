@@ -5,8 +5,8 @@
 
 
 //Delay
-unsigned long m_uloStartMillis;  //some global variables available anywhere in the program
-unsigned long m_uloCurrentMillis;
+unsigned long m_ulStartMillis;  //some global variables available anywhere in the program
+unsigned long m_ulCurrentMillis;
 const unsigned long PERIOD_TIME = 6000;
 
 
@@ -27,14 +27,15 @@ int m_iStatus = WL_IDLE_STATUS;     // the Wifi radio's status
 char m_chaServer[] = "192.168.0.6";
 String m_strHost = "192.168.0.6";
 String m_strAtResponse;
-unsigned long m_uloLastConnectionTime = 0;         // last time you connected to the server, in milliseconds
+unsigned long m_ulLastConnectionTime = 0;         // last time you connected to the server, in milliseconds
 const unsigned long POSTING_INTERVAL = 10000L; // delay between updates, in milliseconds
+const unsigned long CONNECT_TIMEOUT = 3000;
 
 // Initialize the Ethernet client object
 WiFiEspClient m_oClient;
 
 //LCD Intialization
-//int m_iaRtuLcdContrast [10] = {100,100,100,100,100,100,100,100,100,100};
+const int RTU_TOTAL = 11; // {null, RTU1, RTU2, RTU3, RTU4, RTU5, RTU6, RTU7, RTU8, RTU9, RTU10}
 const int PIN_D4 = 25;
 const int PIN_D5 = 24;
 const int PIN_D6 = 23;
@@ -51,27 +52,27 @@ LiquidCrystal m_oRtuLcd8(41, 40, PIN_D4, PIN_D5, PIN_D6, PIN_D7);
 LiquidCrystal m_oRtuLcd9(43, 42, PIN_D4, PIN_D5, PIN_D6, PIN_D7);
 LiquidCrystal m_oRtuLcd10(45, 44, PIN_D4, PIN_D5, PIN_D6, PIN_D7);
 //Pin for LED (Pin LED RU1, Pin LED RU2,...)
-const int PIN_LED[11] = {0, 47, 46, 50, 52, 17, 16, 15, 14, 48, 49};
+const int PIN_LED[RTU_TOTAL] = {0, 47, 46, 50, 52, 17, 16, 15, 14, 48, 49};
 //Pin for Push Button
-const int PIN_BUTTON[11] = {0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
+const int PIN_BUTTON[RTU_TOTAL] = {0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
 //Button Virtual Latch
-bool m_zaButtonState[11] = {false, false, false, false, false, false, false, false, false, false, false};
+bool m_zaButtonState[RTU_TOTAL] = {false, false, false, false, false, false, false, false, false, false, false};
 //API List
 const String API_GET_CURRENT_DATA = "/get-current-data-by-collector/1";
 const String API_GET_TRANSACTION = "/get-transaction-by-collector/1";
 const String API_TRANSACTION_CONFIRM = "/confirm-on-process-by-collector/1";
 const String API_PICKING_CONFIRM = "/confirm-done?m_straBinId=";
 //RU Var Init
-String m_straSkuName[11];
-int m_iaSkuQty[11];
+String m_straSkuName[RTU_TOTAL];
+int m_iaSkuQty[RTU_TOTAL];
 //RU Transaction Data
 bool m_zTransactionStatus = false;
 String m_strTransactionId;
 String m_strTransactionExecution;
-bool m_zaBinStatus[11];
-String m_straBinId[11];
-String m_zaActionCode[11];
-int m_iaActionQty[11];
+bool m_zaBinStatus[RTU_TOTAL]; // transaction status exist or not
+String m_straBinId[RTU_TOTAL];
+String m_zaActionCode[RTU_TOTAL];
+int m_iaActionQty[RTU_TOTAL];
 bool m_zTransactionUpdated = false;
 bool m_zConfirmationStatus = false;
 
@@ -86,7 +87,15 @@ boolean m_zNewData = false;
 bool m_zFirstRun = false;
 const int RECEIVED_CHAR_LENGTH = 1500;
 char m_chaReceivedChars[RECEIVED_CHAR_LENGTH];
+/* m_zaWaitSerial[0] = get current stock data,
+ * m_zaWaitSerial[1] = transaction data,
+ * m_zaWaitSerialCommand[2] = transaction confirmation data
+ */
 bool m_zaWaitSerial[10];
+/*
+ *  m_zaWaitSerialCommand[1] = transaction cmd,
+ *  m_zaWaitSerialCommand[2] = transaction confirmation cmd
+ */
 bool m_zaWaitSerialCommand[10];
 
 
@@ -95,16 +104,13 @@ void setup() {
 
   //Setting UP Pin Mode
   for (int i = 1; i <= 10; i++) {
-    //Activate Pull UP for Push Button
+    //Activate Pull UP for Push Button, default: high, press: low
     pinMode(PIN_BUTTON[i], INPUT_PULLUP);
     Serial.println(PIN_BUTTON[i]);
     //Setting Output for LED Relay
     pinMode(PIN_LED[i], OUTPUT);
   }
-  m_uloStartMillis = millis();
-
-  //Initiate LCD (Contrast)
-  // analogWrite(6,m_iaRtuLcdContrast[1]);
+  m_ulStartMillis = millis();
 
   //Initialize LCD
   m_oRtuLcd1.begin(16, 2);
@@ -152,17 +158,13 @@ void setup() {
 }
 
 void loop() {
-  m_uloCurrentMillis = millis();
+  m_ulCurrentMillis = millis();
 
   //Run 1st Command
   if (m_zFirstRun == false) {
     httpGetRequest(m_strHost, API_GET_CURRENT_DATA);
     m_zaWaitSerial[0] = true;
     m_zFirstRun = true;
-
-    for (int i = 1; i <= 10; i++) {
-      //    Serial.println(PIN_BUTTON[i]);
-    }
   }
 
   //Wait For 1st Initial Data
@@ -175,12 +177,13 @@ void loop() {
       m_zaWaitSerial[0] = false;
       m_zaWaitSerialCommand[1] = true;
       clearBuffer();
-      for (int i = 0; i <= 1500; i++) {
+      for (int i = 0; i <= RECEIVED_CHAR_LENGTH; i++) {
         m_chaReceivedChars[i] = NULL;
       }
     }
   }
 
+  // TODO try with else only
   if (m_zaWaitSerial[0] == false) {
     //Listen For New Transaction
     listenTransaction();
@@ -222,11 +225,11 @@ String recvWithStartEndMarkers(char p_chStartMarker, char p_chEndMarker) {
     }
 
     else if (l_chRc == p_chStartMarker) {
-      l_zRecvInProgress = true;
+        l_zRecvInProgress = true;
+      }
     }
-  }
 
-  if (m_zNewData == true) {
+    if (m_zNewData == true) {
     Serial.println(m_chaReceivedChars);
     m_zNewData = false;
   }
@@ -249,7 +252,7 @@ void clearBuffer() {
 void connectWifi() {
   // attempt to connect to WiFi network
   while ( m_iStatus != WL_CONNECTED) {
-    Serial.print("Attempting to connect to WPA m_chaSsid: ");
+    Serial.print("Attempting to connect to WPA SSID: ");
     Serial.println(m_chaSsid);
 
     // Connect to WPA/WPA2 network
@@ -264,7 +267,7 @@ String httpGetRequest (String p_strHostAddress, String p_strQuery) {
   m_oClient.stop();
 
   // if there's a successful connection
-  if (m_oClient.connect(m_chaServer, 3000)) {
+  if (m_oClient.connect(m_chaServer, CONNECT_TIMEOUT)) {
     Serial.println("Connecting...");
     // send the HTTP GET request
     m_oClient.println(("GET " + p_strQuery + " HTTP/1.1"));
@@ -303,14 +306,14 @@ void JsonParsing_CurrentData() {
   JsonArray l_oArrayData = l_oDoc["data"].as<JsonArray>();
 
   //Parsing Array Data For 10 SKU
-  for (int i = 0; i <= 11; i++) {
+  for (int i = 0; i <= RTU_TOTAL; i++) {
     JsonObject l_oSku = l_oArrayData[i];
-    String l_strBinId = (const char*)l_oSku["device_id"];
-    int l_iBinId2 = l_strBinId.substring(3).toInt();
+    String l_strDeviceId = (const char*)l_oSku["device_id"];
+    int l_iBinId = l_strDeviceId.substring(3).toInt();
     String l_strSkuName = (const char*)l_oSku["sku_name"];
     int l_iSkuQty = (int)l_oSku["quantity"];
-    m_straSkuName[l_iBinId2] = l_strSkuName;
-    m_iaSkuQty[l_iBinId2] = l_iSkuQty;
+    m_straSkuName[l_iBinId] = l_strSkuName;
+    m_iaSkuQty[l_iBinId] = l_iSkuQty;
   }
 }
 
@@ -335,12 +338,12 @@ bool JsonParsing_TransactionData() {
       JsonArray l_oaArrayTransaction = l_oParsedData["data"].as<JsonArray>();
       //Parsing Array Transaction Data For x SKU
 
-      for (int i = 0; i <= 11; i++) {
-        JsonObject l_oaJsonTransactionData = l_oaArrayTransaction[i];
+      for (int i = 0; i <= RTU_TOTAL; i++) {
+        JsonObject l_oJsonTransactionData = l_oaArrayTransaction[i];
         //Get Local Var
-        String l_strBinId = (const char*)l_oaJsonTransactionData["device_id"];
-        String l_action_code = (const char*)l_oaJsonTransactionData["action"];
-        int l_iActionQty = (int)l_oaJsonTransactionData["quantity"];
+        String l_strBinId = (const char*)l_oJsonTransactionData["device_id"];
+        String l_action_code = (const char*)l_oJsonTransactionData["action"];
+        int l_iActionQty = (int)l_oJsonTransactionData["quantity"];
         //Decode bin ID
         int l_iBinId2 = l_strBinId.substring(3).toInt();
         // int ll_bin_id = l_oaJsonTransactionData["m_straBinId"];
@@ -366,8 +369,8 @@ void JsonParsing_TransactionConfirmation() {
   //Parsing the Data And Move to Global Var
   else {
     //Transaction_Status
-    JsonObject l_oaJsonTransactionData = l_oParsedData["data"];
-    m_strTransactionExecution = (const char*)l_oaJsonTransactionData["status"];
+    JsonObject l_oJsonTransactionData = l_oParsedData["data"];
+    m_strTransactionExecution = (const char*)l_oJsonTransactionData["status"];
   }
 }
 
@@ -384,10 +387,10 @@ void JsonParsing_PickingsConfirmation(int p_iBinIds) {
     bool transStatus = l_oParsedData["success"];
     m_zConfirmationStatus = transStatus;
     if (transStatus == true) {
-      JsonObject l_oaJsonTransactionData = l_oParsedData["data"];
+      JsonObject l_oJsonTransactionData = l_oParsedData["data"];
       m_zaBinStatus[p_iBinIds] = false;
       //        m_straSkuName[p_iBinIds]=(const char*)l_oaJsonTransactionData["sku_name"];
-      m_iaSkuQty[p_iBinIds] = (int)l_oaJsonTransactionData["quantity"];
+      m_iaSkuQty[p_iBinIds] = (int)l_oJsonTransactionData["quantity"];
       Serial.println(m_zaBinStatus[p_iBinIds]);
       //        Serial.println(m_straSkuName[p_iBinIds]);
     }
@@ -399,6 +402,7 @@ void JsonParsing_PickingsConfirmation(int p_iBinIds) {
 
 //Function Print Single LCD
 void LCDprint(LiquidCrystal p_oLcd, String p_strFirstRow, String p_strSecondRow) {
+  // TODO try lcd.begin
   p_oLcd.clear();
   p_oLcd.setCursor(0, 0);
   p_oLcd.print(p_strFirstRow);
@@ -409,6 +413,7 @@ void LCDprint(LiquidCrystal p_oLcd, String p_strFirstRow, String p_strSecondRow)
 //Confirmatin Status
 void LCDTransactionUpdate (LiquidCrystal p_oLcd, String p_strAction, String p_strQuantity) {
   // (note: line 1 is the second row, since counting begins with 0):
+  // TODO try lcd.begin
   p_oLcd.clear();
   p_oLcd.setCursor(0, 0);
   p_oLcd.print("Action : " + p_strAction);
@@ -419,6 +424,7 @@ void LCDTransactionUpdate (LiquidCrystal p_oLcd, String p_strAction, String p_st
 //LCDIdle
 void LCDTransactionStockUpdate (LiquidCrystal p_oLcd, String p_strSku, String p_strQuantity) {
   // (note: line 1 is the second row, since counting begins with 0):
+  // TODO try lcd.begin
   p_oLcd.clear();
   p_oLcd.setCursor(0, 0);
   p_oLcd.print("SKU : " + p_strSku);
@@ -509,9 +515,10 @@ void deactivateTransaction() {
       if (m_zaWaitSerial[3] != true) {
         m_zaWaitSerialCommand[3] = true;
       }
+
       if (m_zaWaitSerialCommand[3] == true) {
         clearBuffer();
-        for (int i = 0; i <= 1500; i++) {
+        for (int i = 0; i <= RECEIVED_CHAR_LENGTH; i++) {
           m_chaReceivedChars[i] = NULL;
         }
         //Hit API
@@ -521,6 +528,7 @@ void deactivateTransaction() {
         m_zaWaitSerial[3] = true;
         m_zaWaitSerialCommand[3] = false;
       }
+
       if (m_zaWaitSerial[3] == true) {
         //Get Serial Data
         m_strRawPickingsConfirmation = recvWithStartEndMarkers('<', '>');
@@ -574,29 +582,29 @@ void deactivateTransaction() {
           m_zaWaitSerial[3] = false;
         }
       }
-      i = 11;
+      i = RTU_TOTAL;
     }
   }
 }
 
 //Read Push Button
 bool buttonWasPressed(int p_iPinButton) {
-  bool p_zStatusButton = false;
+  bool l_zStatusButton = false;
 
   if (digitalRead(p_iPinButton) == LOW) {
-    p_zStatusButton = true;
+    l_zStatusButton = true;
   } else {
-    p_zStatusButton = false;
+    l_zStatusButton = false;
   }
 
-  return p_zStatusButton;
+  return l_zStatusButton;
 }
 
 //Complete Transaction Request Function
 void checkPushButton() {
   //Serial.println("Button Pressed");
   for (int i = 1; i <= 10; i++) {
-    //Check Button are Pressed or Not
+  //Check Button are Pressed or Not
     if (buttonWasPressed(PIN_BUTTON[i]) && (m_zaBinStatus[i] == true)) {
       m_zaButtonState[i] = true;
       Serial.println("Button Was Pressed : " + String(i));
@@ -609,14 +617,18 @@ void checkPushButton() {
 //listen Transaction Reuqest Function
 void listenTransaction() {
   //Check Active transaction
-  int transactionTotal = 0;
+  int l_iTransactionTotal = 0;
+
   for (int i = 1; i <= 10; i++) {
+    // check transaction for each RU
     if (m_zaBinStatus[i] == true) {
-      transactionTotal++;
+      l_iTransactionTotal++;
     }
-    if (i == 10 && transactionTotal == 0 && m_zTransactionUpdated == true) {
+
+    // if no transaction or transaction updated for all RUs then reset all values
+    if (i == 10 && l_iTransactionTotal == 0 && m_zTransactionUpdated == true) {
       clearBuffer();
-      for (int i = 0; i <= 1500; i++) {
+      for (int i = 0; i <= RECEIVED_CHAR_LENGTH; i++) {
         m_chaReceivedChars[i] = NULL;
       }
       m_strRawData = "";
@@ -639,14 +651,16 @@ void listenTransaction() {
 
   //If Already Transaction, Confirm the transaction
   if (m_zTransactionStatus == false) {
+
     //Request Transaction Data
-    if (m_zaWaitSerialCommand[1] == true && (m_uloCurrentMillis - m_uloStartMillis >= PERIOD_TIME)) {
+    if (m_zaWaitSerialCommand[1] == true && (m_ulCurrentMillis - m_ulStartMillis >= PERIOD_TIME)) {
       Serial.println(API_GET_TRANSACTION);
       httpGetRequest(m_strHost, API_GET_TRANSACTION);
       m_zaWaitSerialCommand[1] = false;
       m_zaWaitSerial[1] = true;
-      m_uloStartMillis = m_uloCurrentMillis;
+      m_ulStartMillis = m_ulCurrentMillis;
     }
+
     if (m_zaWaitSerial[1] == true) {
       m_strRawTransactionData = recvWithStartEndMarkers('<', '>');
 
@@ -667,12 +681,13 @@ void listenTransaction() {
 
       //Clear
       clearBuffer();
-      for (int i = 0; i <= 1500; i++) {
+      for (int i = 0; i <= RECEIVED_CHAR_LENGTH; i++) {
         m_chaReceivedChars[i] = NULL;
       }
     }
   }
-  else { //Req Pull Data From Raspi if no transaction
+  //Req Pull Data From Raspi if no transaction
+  else {
     if (m_strTransactionExecution != "execute") {
       //Sent Confirmation Transaction to Raspi
       if (m_zaWaitSerialCommand[2] == true) {
@@ -680,8 +695,8 @@ void listenTransaction() {
         httpGetRequest(m_strHost, API_TRANSACTION_CONFIRM);
         m_zaWaitSerialCommand[2] = false;
         m_zaWaitSerial[2] = true;
-
       }
+
       if (m_zaWaitSerial[2] == true) {
         m_strRawTransactionConfirmation = recvWithStartEndMarkers('<', '>');
         if (m_strRawTransactionConfirmation != "") {
@@ -692,8 +707,16 @@ void listenTransaction() {
           Serial.println(m_strTransactionId);
           Serial.println(m_zTransactionUpdated);
           Serial.println(m_strTransactionExecution);
-          Serial.print(m_zaBinStatus[1]); Serial.print(m_zaBinStatus[2]); Serial.print(m_zaBinStatus[3]); Serial.print(m_zaBinStatus[4]); Serial.print(m_zaBinStatus[5]);
-          Serial.print(m_zaBinStatus[6]); Serial.print(m_zaBinStatus[7]); Serial.print(m_zaBinStatus[8]); Serial.print(m_zaBinStatus[9]); Serial.print(m_zaBinStatus[10]);
+          Serial.print(m_zaBinStatus[1]);
+          Serial.print(m_zaBinStatus[2]);
+          Serial.print(m_zaBinStatus[3]);
+          Serial.print(m_zaBinStatus[4]);
+          Serial.print(m_zaBinStatus[5]);
+          Serial.print(m_zaBinStatus[6]);
+          Serial.print(m_zaBinStatus[7]);
+          Serial.print(m_zaBinStatus[8]);
+          Serial.print(m_zaBinStatus[9]);
+          Serial.print(m_zaBinStatus[10]);
           //m_zaWaitSerialCommand[3]=true;
         }
       }
@@ -715,7 +738,7 @@ void listenTransaction() {
 //Get Initial SKU & Stock Data Function
 void getInitialData() {
   //Get Data
-  //  m_strRawStockData = httpGetRequest(m_strHost,API_GET_CURRENT_DATA);
+//  m_strRawStockData = httpGetRequest(m_strHost,API_GET_CURRENT_DATA);
   //Parsing Stock Data
   JsonParsing_CurrentData();
   //Add If Here
