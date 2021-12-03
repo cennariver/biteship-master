@@ -223,13 +223,12 @@ String recvWithStartEndMarkers(char p_chStartMarker, char p_chEndMarker) {
         m_zNewData = true;
       }
     }
-
     else if (l_chRc == p_chStartMarker) {
-        l_zRecvInProgress = true;
-      }
+      l_zRecvInProgress = true;
     }
+  }
 
-    if (m_zNewData == true) {
+  if (m_zNewData == true) {
     Serial.println(m_chaReceivedChars);
     m_zNewData = false;
   }
@@ -303,11 +302,11 @@ void JsonParsing_CurrentData() {
 
   //Data Object (10 RU , SKU Name, Bin ID,
   JsonObject l_oData = l_oDoc["data"];
-  JsonArray l_oArrayData = l_oDoc["data"].as<JsonArray>();
+  JsonArray l_oaArrayData = l_oDoc["data"].as<JsonArray>();
 
   //Parsing Array Data For 10 SKU
   for (int i = 0; i <= RTU_TOTAL; i++) {
-    JsonObject l_oSku = l_oArrayData[i];
+    JsonObject l_oSku = l_oaArrayData[i];
     String l_strDeviceId = (const char*)l_oSku["device_id"];
     int l_iBinId = l_strDeviceId.substring(3).toInt();
     String l_strSkuName = (const char*)l_oSku["sku_name"];
@@ -500,7 +499,6 @@ void activateTransaction() {
       }
       delay(50);
       digitalWrite(PIN_LED[i], HIGH); //LED ON
-
     }
     else {
       digitalWrite(PIN_LED[i], LOW); //LED OFF
