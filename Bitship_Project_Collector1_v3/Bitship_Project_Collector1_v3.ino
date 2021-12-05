@@ -17,6 +17,7 @@ const char    RTU_NUMBER_EIGHT  = RTU_NUMBER_SEVEN + 1;
 const char    RTU_NUMBER_NINE   = RTU_NUMBER_EIGHT + 1;
 const char    RTU_NUMBER_TEN    = RTU_NUMBER_NINE + 1;
 const char    RTU_TOTAL         = RTU_NUMBER_TEN + 1;
+// TODO try char data type to digital pin
 const int     PIN_D4        = 25;
 const int     PIN_D5        = 24;
 const int     PIN_D6        = 23;
@@ -43,54 +44,53 @@ const int PIN_DETECT_RU[RTU_TOTAL]  = {A15, A14, A13, A12, A11, A10, A9, A8, A7,
 bool m_zaIsRtuConnected[RTU_TOTAL]  = {false, false, false, false, false, false, false, false, false, false};
 
 /** Wifi **/
-// the Wifi radio's status TODO rename using capital letter
-//const char    m_baSsid[]    = "tamsos blok HG 25A";            // your network m_chaSsid (name)
-//const char    m_baPass[]    = "qwerty123456";        // your network m_chPassword
-//const char    m_baSsid[]    = "c7";            // your network m_chaSsid (name)
-//const char    m_baPass[]    = "da645591";        // your network m_chPassword
-const char    m_baSsid[]    = "Warehouse Biteship";            // your network m_chaSsid (name)
-const char    m_baPass[]    = "Bismilahlancar";        // your network m_chPassword
-//const char    m_baSsid[]    = "Diskum_723";            // your network m_chaSsid (name)
-//const char    m_baPass[]    = "19283746abcd";
+//const char    WIFI_SSID[]         = "tamsos blok HG 25A";            // your network m_chaSsid (name)
+//const char    WIFI_PASSWORD[]     = "qwerty123456";        // your network m_chPassword
+//const char    WIFI_SSID[]         = "c7";            // your network m_chaSsid (name)
+//const char    WIFI_PASSWORD[]     = "da645591";        // your network m_chPassword
+const char    WIFI_SSID[]         = "Warehouse Biteship";            // your network m_chaSsid (name)
+const char    WIFI_PASSWORD[]     = "Bismilahlancar";        // your network m_chPassword
+//const char    WIFI_SSID[]         = "Diskum_723";            // your network m_chaSsid (name)
+//const char    WIFI_PASSWORD[]     = "19283746abcd";
 int m_iStatus = WL_IDLE_STATUS;
 
 /** Raspi API **/
 WiFiEspClient m_oClient;
 const unsigned long   CLIENT_CONNECTING_TIMEOUT     = 3000;
 const char        COLLECTOR_IDENTIFIER      = 1;
+// TODO try to remove String in COLLECTOR_IDENTIFIER changed data type
 const String      API_GET_CURRENT_DATA      = "/get-current-data-by-collector/" + String(COLLECTOR_IDENTIFIER);
 const String      API_GET_TRANSACTION       = "/get-transaction-by-collector/" + String(COLLECTOR_IDENTIFIER);
-const String      API_TRANSACTION_CONFIRM     = "/confirm-on-process-by-collector/" + String(COLLECTOR_IDENTIFIER);
+const String      API_TRANSACTION_CONFIRM   = "/confirm-on-process-by-collector/" + String(COLLECTOR_IDENTIFIER);
 const char        HOST_IP_ADDRESS[]         = "192.168.0.6";
 //first menu
-const char      RTU_STATE_INITIALIZING        = 0;
-const char      RTU_STATE_IDLE            = RTU_STATE_INITIALIZING + 1; // waiting for transaction, always sending get request if transaction is exist
-const char      RTU_STATE_TRANSACTION         = RTU_STATE_IDLE + 1; // active -> processing -> confirming -> done (back to idle)
+const char      RTU_STATE_INITIALIZED    = 0;
+const char      RTU_STATE_IDLE            = RTU_STATE_INITIALIZED + 1; // waiting for transaction, always sending get request if transaction is exist
+const char      RTU_STATE_TRANSACTION     = RTU_STATE_IDLE + 1; // active -> processing -> confirming -> done (back to idle)
 //second menu
-const char      RTU_STATE_TRANSACTION_ONGOING     = 0;
+const char      RTU_STATE_TRANSACTION_ONGOING       = 0;
 const char      RTU_STATE_TRANSACTION_CONFIRMATION  = RTU_STATE_TRANSACTION_ONGOING + 1;
 //RTU layer
 const char      RTU_STATE_FIRST_LAYER         = 0;
 const char      RTU_STATE_SECOND_LAYER        = RTU_STATE_FIRST_LAYER + 1;
-const char      RTU_STATE_LAYER_THICKNESS       = RTU_STATE_SECOND_LAYER + 1;
+const char      RTU_STATE_LAYER_THICKNESS     = RTU_STATE_SECOND_LAYER + 1;
 char l_baRtuState[RTU_STATE_LAYER_THICKNESS];
 //Data processing
-const int       MAX_RECEIVED_CHAR_LENGTH  = 1500;
+const int       MAX_RECEIVED_CHAR_LENGTH    = 1500; // TODO try with 1000
 String m_strRawClientData;
-StaticJsonDocument<MAX_RECEIVED_CHAR_LENGTH> m_oDoc;
 //RU Var Init
 String m_straSkuName[RTU_TOTAL];
 int m_iaSkuQty[RTU_TOTAL];
-// IDLE
-const unsigned long   PERIOD_TIME       = 6000;
+//IDLE STATE
+const unsigned long   PERIOD_TIME           = 6000;
 unsigned long m_ulStartMillis;  //some global variables available anywhere in the program
 unsigned long m_ulCurrentMillis;
-// TRANSACTION
+//TRANSACTION STATE
 String m_strTransactionId;
 String m_strTransactionExecution;
 bool m_zaBinStatus[RTU_TOTAL]; // transaction status exist or not
 String m_straBinId[RTU_TOTAL];
-String m_zaActionCode[RTU_TOTAL];
+String m_straActionCode[RTU_TOTAL];
 int m_iaActionQty[RTU_TOTAL];
 
 void setup() {
@@ -151,7 +151,7 @@ void loop() {
   m_ulCurrentMillis = millis();
 
   switch(l_baRtuState[RTU_STATE_FIRST_LAYER]){
-    case RTU_STATE_INITIALIZING:
+    case RTU_STATE_INITIALIZED:
       // get current stock data for the first time
       LCD_print("Connected to WiFi", "Search master API");
       httpGetRequest(HOST_IP_ADDRESS, API_GET_CURRENT_DATA);
@@ -160,7 +160,7 @@ void loop() {
       if(recvWithStartEndMarkers('<', '>') != "") {
         Serial.println(m_strRawClientData);
         JsonParsing_CurrentData();
-        LCD_DisplayStock(255);
+        LCD_DisplayStock();
         clearBuffer();
 
         l_baRtuState[RTU_STATE_FIRST_LAYER] = RTU_STATE_IDLE;
@@ -197,18 +197,11 @@ void loop() {
             JsonParsing_TransactionConfirmation();
             Serial.println(m_strRawClientData);
             Serial.println(m_strTransactionId);
-//            Serial.println(m_zTransactionUpdated);
             Serial.println(m_strTransactionExecution);
-            Serial.print(m_zaBinStatus[1]);
-            Serial.print(m_zaBinStatus[2]);
-            Serial.print(m_zaBinStatus[3]);
-            Serial.print(m_zaBinStatus[4]);
-            Serial.print(m_zaBinStatus[5]);
-            Serial.print(m_zaBinStatus[6]);
-            Serial.print(m_zaBinStatus[7]);
-            Serial.print(m_zaBinStatus[8]);
-            Serial.print(m_zaBinStatus[9]);
-            Serial.print(m_zaBinStatus[10]);
+            for (int i = 0; i < RTU_TOTAL; i++) {
+                Serial.print(m_zaBinStatus[i]);
+            }
+            Serial.println();
 
             activateTransaction();
             l_baRtuState[RTU_STATE_SECOND_LAYER] = RTU_STATE_TRANSACTION_CONFIRMATION;
@@ -216,8 +209,7 @@ void loop() {
           break;
 
         case RTU_STATE_TRANSACTION_CONFIRMATION:
-          //Check Push Button For confirming Transaction
-          checkPushButton();
+          //Check Push Button For confirming Transaction (HIT API)
           deactivateTransaction();
 
           //check active transaction
@@ -239,6 +231,8 @@ void loop() {
       break;
   }
 
+  //Loop Sampling Time
+  delay(1);
 }
 
 
@@ -260,27 +254,30 @@ void LCD_print(String p_strFirstRow, String p_strSecondRow){
     }
 }
 
-//Function LCD display all SKU & quantity
+//Function LCD display specific SKU & quantity
 //prv: LCDUpdatesStock(int p_iRtuId)
 void LCD_DisplayStock(int p_iRtuId) {
   String l_strSku = m_straSkuName[p_iRtuId];
   int l_iaSkuQty = m_iaSkuQty[p_iRtuId];
 
-  //Print Stock SKU to 10 RU if p_iRtuId = 255
-  for (int i = 0; i < RTU_TOTAL; i++) {
-    if(p_iRtuId == 255 || p_iRtuId == i) {
-      m_oaRtu[i].begin(16, 2);
-      m_oaRtu[i].clear();
-      m_oaRtu[i].setCursor(0, 0);
-      m_oaRtu[i].print("SKU:" + l_strSku);
-      m_oaRtu[i].setCursor(0, 1);
-      m_oaRtu[i].print("Qty:" + String(l_iaSkuQty));
-      m_oaRtu[i].setCursor(11, 1);
-      m_oaRtu[i].print("RU-" + String(p_iRtuId));
-    }
-  }
+  m_oaRtu[p_iRtuId].begin(16, 2);
+  m_oaRtu[p_iRtuId].clear();
+  m_oaRtu[p_iRtuId].setCursor(0, 0);
+  m_oaRtu[p_iRtuId].print("SKU:" + l_strSku);
+  m_oaRtu[p_iRtuId].setCursor(0, 1);
+  m_oaRtu[p_iRtuId].print("Qty:" + String(l_iaSkuQty));
+  m_oaRtu[p_iRtuId].setCursor(11, 1);
+  m_oaRtu[p_iRtuId].print("RU-" + String(p_iRtuId));
 }
 
+//Function LCD display all SKU & quantity
+//prv: LCDUpdatesStock(int p_iRtuId)
+void LCD_DisplayStock() {
+  //Print Stock SKU to 10 RU
+  for (int i = 0; i < RTU_TOTAL; i++) {
+    LCD_DisplayStock(i);
+  }
+}
 
 //Confirmatin Status
 void LCD_TransactionUpdate (LiquidCrystal p_oLcd, String p_strAction, String p_strQuantity) {
@@ -300,10 +297,10 @@ void connectWifi() {
   // attempt to connect to WiFi network
   while ( m_iStatus != WL_CONNECTED) {
     Serial.print("Attempting to connect to WPA SSID: ");
-    Serial.println(m_baSsid);
+    Serial.println(WIFI_SSID);
 
     // Connect to WPA/WPA2 network
-    m_iStatus = WiFi.begin(m_baSsid, m_baPass);
+    m_iStatus = WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   }
 
   Serial.println("You're connected to the network");
@@ -455,7 +452,7 @@ bool JsonParsing_TransactionData() {
         //Move Global Array
         m_zaBinStatus[l_iBinId] = true;
         m_straBinId[l_iBinId] = l_strBinId;
-        m_zaActionCode[l_iBinId] = l_action_code;
+        m_straActionCode[l_iBinId] = l_action_code;
         m_iaActionQty[l_iBinId] = l_iActionQty;
       }
     }
@@ -506,7 +503,7 @@ void activateTransaction() {
   for (int i=0; i < RTU_TOTAL; i++) {
     if (m_zaBinStatus[i] == true) {
       // LCD Update
-      LCD_TransactionUpdate(m_oaRtu[i], m_zaActionCode[i], String(m_iaActionQty[i]));
+      LCD_TransactionUpdate(m_oaRtu[i], m_straActionCode[i], String(m_iaActionQty[i]));
       delay(50);
       digitalWrite(PIN_LED[i], HIGH); //LED ON
     }
@@ -517,10 +514,14 @@ void activateTransaction() {
 }
 
 void deactivateTransaction() {
+  // check if button was pressed
+  checkPushButton();
+
+  // TODO try to remove for loop statement then hit api with specific RTU only that button was pressed previously
   for (int i = 1; i <= 10; i++) {
     if (m_zaIsButtonPressed[i] == true) {
       //Hit API
-      // httpGetRequest(m_chaServer, "/confirm-done?bin_id="+String(i)+"&transaction_id="+m_strTransactionId);
+      // httpGetRequest(HOST_IP_ADDRESS, "/confirm-done?bin_id="+String(i)+"&transaction_id="+m_strTransactionId);
       httpGetRequest(HOST_IP_ADDRESS, "/confirm-done?transaction_id=" + m_strTransactionId + "&device_id=" + m_straBinId[i]);
 
       //Get Serial Data
