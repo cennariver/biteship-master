@@ -54,20 +54,20 @@ const char    WIFI_PASSWORD[]     = "Bismilahlancar";        // your network m_c
 //const char    WIFI_PASSWORD[]     = "19283746abcd";
 int m_iStatus = WL_IDLE_STATUS;
 
-/** Raspi API **/
+/** Client **/
 WiFiEspClient m_oClient;
+const char            COLLECTOR_IDENTIFIER          = 1;
 const unsigned long   CLIENT_CONNECTING_TIMEOUT     = 3000;
-const char        COLLECTOR_IDENTIFIER      = 1;
 // TODO try to remove String in COLLECTOR_IDENTIFIER changed data type
 const String      API_GET_CURRENT_DATA      = "/get-current-data-by-collector/" + String(COLLECTOR_IDENTIFIER);
 const String      API_GET_TRANSACTION       = "/get-transaction-by-collector/" + String(COLLECTOR_IDENTIFIER);
-const String      API_TRANSACTION_CONFIRM   = "/confirm-on-process-by-collector/" + String(COLLECTOR_IDENTIFIER);
-const char        HOST_IP_ADDRESS[]         = "192.168.0.6";
-//first menu
+const String      API_TRANSACTION_CONFIRMATION   = "/confirm-on-process-by-collector/" + String(COLLECTOR_IDENTIFIER);
+const char        HOST_ADDRESS[]         = "192.168.0.6";
+//first layer
 const char      RTU_STATE_INITIALIZED    = 0;
 const char      RTU_STATE_IDLE            = RTU_STATE_INITIALIZED + 1; // waiting for transaction, always sending get request if transaction is exist
 const char      RTU_STATE_TRANSACTION     = RTU_STATE_IDLE + 1; // active -> processing -> confirming -> done (back to idle)
-//second menu
+//second layer
 const char      RTU_STATE_TRANSACTION_ONGOING       = 0;
 const char      RTU_STATE_TRANSACTION_CONFIRMATION  = RTU_STATE_TRANSACTION_ONGOING + 1;
 //RTU layer
@@ -82,9 +82,9 @@ String m_strRawClientData;
 String m_straSkuName[RTU_TOTAL];
 int m_iaSkuQty[RTU_TOTAL];
 //IDLE STATE
-const unsigned long   PERIOD_TIME           = 6000;
-unsigned long m_ulStartMillis;  //some global variables available anywhere in the program
+const unsigned long   GET_TRANSACTION_PERIOD_TIME           = 6000;
 unsigned long m_ulCurrentMillis;
+unsigned long m_ulLastHitApiGetTransaction = 0;  //some global variables available anywhere in the program
 //TRANSACTION STATE
 String m_strTransactionId;
 String m_strTransactionExecution;
@@ -95,128 +95,145 @@ int m_iaActionQty[RTU_TOTAL];
 
 void setup() {
 
-    //Setting input and output for the collector
+  //Setting input and output for the collector
+  for (int i = 0; i < RTU_TOTAL; i++) {
+    //Activate Pull UP for Push Button and RTU detector, default: high, pressed: low
+    pinMode(PIN_BUTTON[i], INPUT_PULLUP);
+    pinMode(PIN_DETECT_RU[i], INPUT_PULLUP);
+    //Setting Output for LED Relay
+    pinMode(PIN_LED[i], OUTPUT);
+    //Initialize LCD as display output
+    m_oaRtu[i].begin(16,2);
+
+    // Check the availability of RTU
     for (int i = 0; i < RTU_TOTAL; i++) {
-      //Activate Pull UP for Push Button and RTU detector, default: high, pressed: low
-      pinMode(PIN_BUTTON[i], INPUT_PULLUP);
-      pinMode(PIN_DETECT_RU[i], INPUT_PULLUP);
-      //Setting Output for LED Relay
-      pinMode(PIN_LED[i], OUTPUT);
-      //Initialize LCD as display output
-      m_oaRtu[i].begin(16,2);
-
-      // Check the availability of RTU
-      for (int i = 0; i < RTU_TOTAL; i++) {
-        if(digitalRead(PIN_DETECT_RU[i]) == LOW) {
-          // RTU connected
-          m_zaIsRtuConnected[i] = true;
-          // Display on LCD that RTU is waiting for running code
-          LCD_print(m_oaRtu[i], "Initialization", "RU-" + String(i+1) + " Please Wait");
-        }
-        else{
-          // RTU disconnected
-          m_zaIsRtuConnected[i] = false;
-        }
+      if(digitalRead(PIN_DETECT_RU[i]) == LOW) {
+        // RTU connected
+        m_zaIsRtuConnected[i] = true;
+        // Display on LCD that RTU is waiting for running code
+        Lcd_Print(m_oaRtu[i], "Initialization", "RU-" + String(i+1) + " Please Wait");
       }
-
-      // Just give delay
-      delay(50);
+      else{
+        // RTU disconnected
+        m_zaIsRtuConnected[i] = false;
+      }
     }
-    m_ulStartMillis = millis();
 
-    //Initate Serial Communication
+    // Just give delay
+    delay(50);
+  }
 
-    //For ESP01
-    Serial1.begin(115200);
-    Serial1.setTimeout(5000);
-    WiFi.init(&Serial1);
+  //Initate Serial Communication
 
-    //For Arduino Serial
-    Serial.begin(115200);
+  //For ESP01
+  Serial1.begin(115200);
+  Serial1.setTimeout(5000);
+  WiFi.init(&Serial1);
 
-    //Clear Buffer
-    clearBuffer();
+  //For Arduino Serial
+  Serial.begin(115200);
 
-    //Initiate ESP8266 Startup
-    connectWifi();
+  //Clear Buffer
+  clearBuffer();
 
-    //Wait For Running Code
-    delay(1000);
+  //Initiate ESP8266 Startup
+  Wifi_ConnectToNetwork();
 
+  //Wait For Running Code
+  delay(1000);
 }
 
 void loop() {
+  // TODO remove lcd display inside this function
   checkRtuState();
 
   m_ulCurrentMillis = millis();
 
   switch(l_baRtuState[RTU_STATE_FIRST_LAYER]){
+
     case RTU_STATE_INITIALIZED:
-      // get current stock data for the first time
-      LCD_print("Connected to WiFi", "Search master API");
-      httpGetRequest(HOST_IP_ADDRESS, API_GET_CURRENT_DATA);
+      // PRINT: get current stock data for the first time
+      Lcd_Print("Connected to WiFi", "Search master API");
 
-      // listen for current stock data
-      if(recvWithStartEndMarkers('<', '>') != "") {
-        Serial.println(m_strRawClientData);
-        JsonParsing_CurrentData();
-        LCD_DisplayStock();
-        clearBuffer();
-
-        l_baRtuState[RTU_STATE_FIRST_LAYER] = RTU_STATE_IDLE;
-      }
-      break;
-    case RTU_STATE_IDLE:
-      // get available transaction every specific period
-      if (m_ulCurrentMillis - m_ulStartMillis >= PERIOD_TIME) {
-        Serial.println(API_GET_TRANSACTION);
-        httpGetRequest(HOST_IP_ADDRESS, API_GET_TRANSACTION);
-
-        // listen for the transaction
-        if(recvWithStartEndMarkers('<', '>') != "") {
+      if(Client_HttpGetRequest(HOST_ADDRESS, API_GET_CURRENT_DATA)){
+        // listen for current stock data
+        if(Client_ReceiveJsonData('<', '>') != "") {
           Serial.println(m_strRawClientData);
-
-          //Parsing raw Transaction Json Data if transaction exist
-          if (JsonParsing_TransactionData()) {
-            Serial.print("transaction IDs :"); Serial.println(m_strTransactionId);
-            l_baRtuState[RTU_STATE_FIRST_LAYER] = RTU_STATE_TRANSACTION;
-          }
-          //Clear
+          Client_JsonParsingCurrentData();
+          Lcd_DisplayStock();
           clearBuffer();
+
+          l_baRtuState[RTU_STATE_FIRST_LAYER] = RTU_STATE_IDLE;
         }
-        m_ulStartMillis = m_ulCurrentMillis;
       }
       break;
+
+    case RTU_STATE_IDLE:
+      // PRINT: display stock data
+      // TODO try uncomment this to always display stock to lcd in idle state
+//      Lcd_DisplayStock();
+
+      // get available transaction every specific period
+      if (m_ulCurrentMillis - m_ulLastHitApiGetTransaction >= GET_TRANSACTION_PERIOD_TIME) {
+
+        Serial.println(API_GET_TRANSACTION);
+
+        if(Client_HttpGetRequest(HOST_ADDRESS, API_GET_TRANSACTION)){
+            // listen for the transaction
+            if(Client_ReceiveJsonData('<', '>') != "") {
+              Serial.println(m_strRawClientData);
+              //Parsing raw Transaction Json Data if transaction exist
+              if (Client_JsonParsingTransactionData()) {
+                Serial.print("transaction IDs :");
+                Serial.println(m_strTransactionId);
+                l_baRtuState[RTU_STATE_FIRST_LAYER] = RTU_STATE_TRANSACTION;
+              }
+              //Clear
+              clearBuffer();
+            }
+        }
+        m_ulLastHitApiGetTransaction = m_ulCurrentMillis;
+      }
+      break;
+
     case RTU_STATE_TRANSACTION:
       switch (l_baRtuState[RTU_STATE_SECOND_LAYER]) {
+
         case RTU_STATE_TRANSACTION_ONGOING:
-          Serial.println(API_TRANSACTION_CONFIRM);
-          httpGetRequest(HOST_IP_ADDRESS, API_TRANSACTION_CONFIRM);
+          Serial.println(API_TRANSACTION_CONFIRMATION);
 
-          if(recvWithStartEndMarkers('<', '>') == "") {
-            JsonParsing_TransactionConfirmation();
-            Serial.println(m_strRawClientData);
-            Serial.println(m_strTransactionId);
-            Serial.println(m_strTransactionExecution);
-            for (int i = 0; i < RTU_TOTAL; i++) {
-                Serial.print(m_zaBinStatus[i]);
-            }
-            Serial.println();
+          if(Client_HttpGetRequest(HOST_ADDRESS, API_TRANSACTION_CONFIRMATION)){
+              if(Client_ReceiveJsonData('<', '>') == "") {
+                Client_JsonParsingTransactionConfirmation();
+                Serial.println(m_strRawClientData);
+                Serial.println(m_strTransactionId);
+                Serial.println(m_strTransactionExecution);
+                for (int i = 0; i < RTU_TOTAL; i++) {
+                    Serial.print(m_zaBinStatus[i]);
+                }
+                Serial.println();
 
-            activateTransaction();
-            l_baRtuState[RTU_STATE_SECOND_LAYER] = RTU_STATE_TRANSACTION_CONFIRMATION;
+                // PRINT: display active RTU
+                // TODO try to move this outside this if to always print LCD
+                Client_ActivateTransaction();
+                l_baRtuState[RTU_STATE_SECOND_LAYER] = RTU_STATE_TRANSACTION_CONFIRMATION;
+              }
           }
           break;
 
         case RTU_STATE_TRANSACTION_CONFIRMATION:
           //Check Push Button For confirming Transaction (HIT API)
-          deactivateTransaction();
+          Client_DeactivateTransaction();
 
           //check active transaction
           int l_iActiveTransaction = 0;
           for (int i = 0; i < RTU_TOTAL; i++) {
+            // PRINT: display stock data for idle RTU and display transaction data for active RTU
             if (m_zaBinStatus[i] == true) {
               l_iActiveTransaction++;
+              Lcd_TransactionOngoing(i);
+            }else{
+              Lcd_DisplayStock(i);
             }
           }
 
@@ -238,8 +255,7 @@ void loop() {
 
 /** LCD Related Function **/
 //Function print to specific LCD
-void LCD_print(LiquidCrystal p_oLcd, String p_strFirstRow, String p_strSecondRow) {
-  // TODO try lcd.begin
+void Lcd_Print(LiquidCrystal p_oLcd, String p_strFirstRow, String p_strSecondRow) {
   p_oLcd.clear();
   p_oLcd.setCursor(0, 0);
   p_oLcd.print(p_strFirstRow);
@@ -248,54 +264,49 @@ void LCD_print(LiquidCrystal p_oLcd, String p_strFirstRow, String p_strSecondRow
 }
 
 //Function print to all LCD
-void LCD_print(String p_strFirstRow, String p_strSecondRow){
-    for (int i = 0; i < RTU_TOTAL; i++) {
-      LCD_print(m_oaRtu[i], p_strFirstRow, p_strSecondRow);
-    }
+void Lcd_Print(String p_strFirstRow, String p_strSecondRow){
+  for (int i = 0; i < RTU_TOTAL; i++) {
+    Lcd_Print(m_oaRtu[i], p_strFirstRow, p_strSecondRow);
+  }
 }
 
 //Function LCD display specific SKU & quantity
-//prv: LCDUpdatesStock(int p_iRtuId)
-void LCD_DisplayStock(int p_iRtuId) {
-  String l_strSku = m_straSkuName[p_iRtuId];
-  int l_iaSkuQty = m_iaSkuQty[p_iRtuId];
-
+void Lcd_DisplayStock(int p_iRtuId) {
+  // TODO try to remove lcd begin
   m_oaRtu[p_iRtuId].begin(16, 2);
   m_oaRtu[p_iRtuId].clear();
   m_oaRtu[p_iRtuId].setCursor(0, 0);
-  m_oaRtu[p_iRtuId].print("SKU:" + l_strSku);
+  m_oaRtu[p_iRtuId].print("SKU:" + m_straSkuName[p_iRtuId]);
   m_oaRtu[p_iRtuId].setCursor(0, 1);
-  m_oaRtu[p_iRtuId].print("Qty:" + String(l_iaSkuQty));
+  m_oaRtu[p_iRtuId].print("Qty:" + String(m_iaSkuQty[p_iRtuId]));
   m_oaRtu[p_iRtuId].setCursor(11, 1);
   m_oaRtu[p_iRtuId].print("RU-" + String(p_iRtuId));
 }
 
 //Function LCD display all SKU & quantity
-//prv: LCDUpdatesStock(int p_iRtuId)
-void LCD_DisplayStock() {
+void Lcd_DisplayStock() {
   //Print Stock SKU to 10 RU
   for (int i = 0; i < RTU_TOTAL; i++) {
-    LCD_DisplayStock(i);
+    Lcd_DisplayStock(i);
   }
 }
 
-//Confirmatin Status
-void LCD_TransactionUpdate (LiquidCrystal p_oLcd, String p_strAction, String p_strQuantity) {
+//Confirmation Status
+void Lcd_TransactionOngoing(int p_iRtuId) {
   // (note: line 1 is the second row, since counting begins with 0):
-  // TODO try lcd.begin
-  p_oLcd.clear();
-  p_oLcd.setCursor(0, 0);
-  p_oLcd.print("Action : " + p_strAction);
-  p_oLcd.setCursor(0, 1);
-  p_oLcd.print("Quantity : " + p_strQuantity);
+  m_oaRtu[p_iRtuId].clear();
+  m_oaRtu[p_iRtuId].setCursor(0, 0);
+  m_oaRtu[p_iRtuId].print("Action : " + m_straActionCode[p_iRtuId]);
+  m_oaRtu[p_iRtuId].setCursor(0, 1);
+  m_oaRtu[p_iRtuId].print("Quantity : " + String(m_iaActionQty[p_iRtuId]));
 }
 /** LCD Related Function **/
 
 /** WIFI ESP Function **/
 //Connect to your wifi network
-void connectWifi() {
+void Wifi_ConnectToNetwork() {
   // attempt to connect to WiFi network
-  while ( m_iStatus != WL_CONNECTED) {
+  while (m_iStatus != WL_CONNECTED) {
     Serial.print("Attempting to connect to WPA SSID: ");
     Serial.println(WIFI_SSID);
 
@@ -308,24 +319,16 @@ void connectWifi() {
 /** WIFI ESP Function **/
 
 /** Client Function **/
-void httpGetRequest(char p_baServer[], String p_strQuery) {
+bool Client_HttpGetRequest(char p_baServer[], String p_strQuery) {
   bool l_zIsConnected = false;
-  unsigned long l_ulStartConnectingTime = millis();
-  unsigned long l_ulCurrentConnectingTime = millis();
 
+  // TODO Try removing this loop
   while(!l_zIsConnected) {
     //Close All Socket
     m_oClient.stop();
 
-    l_zIsConnected = m_oClient.connect(p_baServer, CLIENT_CONNECTING_TIMEOUT);
     Serial.println("Attempting to connect to raspi API: " + String(p_baServer));
-
-    l_ulCurrentConnectingTime = millis();
-
-    // failed, break loop TODO check for timeout
-//    if((l_ulCurrentConnectingTime - l_ulStartConnectingTime) > CLIENT_CONNECTING_TIMEOUT){
-//      break;
-//    }
+    l_zIsConnected = m_oClient.connect(p_baServer, CLIENT_CONNECTING_TIMEOUT);
   }
 
   // if there's a successful connection
@@ -339,15 +342,17 @@ void httpGetRequest(char p_baServer[], String p_strQuery) {
     m_oClient.println(("Host: " + String(p_baServer)));
     m_oClient.println("Connection: close");
     m_oClient.println();
+
+    return true;
   }
-  else {
-    // if you couldn't make a connection
-    LCD_print("Failed", "Restart Collector");
-    Serial.println("Connection failed, please restart related collector");
-  }
+
+  // if you couldn't make a connection
+  Lcd_Print("Failed", "Restart Collector");
+  Serial.println("Connection failed, please restart related collector");
+  return false;
 }
 
-String recvWithStartEndMarkers(char p_bStartMarker, char p_bEndMarker) {
+String Client_ReceiveJsonData(char p_bStartMarker, char p_bEndMarker) {
 
   char l_baReceivedChars[MAX_RECEIVED_CHAR_LENGTH];
   static boolean l_zRecvInProgress = false;
@@ -387,7 +392,7 @@ String recvWithStartEndMarkers(char p_bStartMarker, char p_bEndMarker) {
 }
 
 //Parsing CurrentData
-void JsonParsing_CurrentData() {
+void Client_JsonParsingCurrentData() {
   StaticJsonDocument<MAX_RECEIVED_CHAR_LENGTH> l_oDoc;
   DeserializationError l_oError = deserializeJson(l_oDoc, m_strRawClientData);
 
@@ -420,7 +425,7 @@ void JsonParsing_CurrentData() {
 }
 
 //Parsing TransactionData
-bool JsonParsing_TransactionData() {
+bool Client_JsonParsingTransactionData() {
   bool l_zStatus = false;
   StaticJsonDocument<MAX_RECEIVED_CHAR_LENGTH> l_oDoc;
   DeserializationError l_oError = deserializeJson(l_oDoc, m_strRawClientData);
@@ -461,7 +466,7 @@ bool JsonParsing_TransactionData() {
 }
 
 //Parsing CurrentData
-void JsonParsing_TransactionConfirmation() {
+void Client_JsonParsingTransactionConfirmation() {
   StaticJsonDocument<MAX_RECEIVED_CHAR_LENGTH> l_oDoc;
   DeserializationError l_oError = deserializeJson(l_oDoc, m_strRawClientData);
 
@@ -476,7 +481,7 @@ void JsonParsing_TransactionConfirmation() {
   }
 }
 
-void JsonParsing_PickingsConfirmation(int p_iBinIds) {
+void Client_JsonParsingPickingsConfirmation(int p_iBinIds) {
   StaticJsonDocument<MAX_RECEIVED_CHAR_LENGTH> l_oDoc;
   DeserializationError l_oError = deserializeJson(l_oDoc, m_strRawClientData);
 
@@ -498,22 +503,23 @@ void JsonParsing_PickingsConfirmation(int p_iBinIds) {
 }
 
 //Function Pickings
-void activateTransaction() {
+void Client_ActivateTransaction() {
   //Turn on LED
   for (int i=0; i < RTU_TOTAL; i++) {
     if (m_zaBinStatus[i] == true) {
       // LCD Update
-      LCD_TransactionUpdate(m_oaRtu[i], m_straActionCode[i], String(m_iaActionQty[i]));
+      Lcd_TransactionOngoing(i);
       delay(50);
       digitalWrite(PIN_LED[i], HIGH); //LED ON
     }
     else {
+      Lcd_DisplayStock(i);
       digitalWrite(PIN_LED[i], LOW); //LED OFF
     }
   }
 }
 
-void deactivateTransaction() {
+void Client_DeactivateTransaction() {
   // check if button was pressed
   checkPushButton();
 
@@ -521,23 +527,23 @@ void deactivateTransaction() {
   for (int i = 1; i <= 10; i++) {
     if (m_zaIsButtonPressed[i] == true) {
       //Hit API
-      // httpGetRequest(HOST_IP_ADDRESS, "/confirm-done?bin_id="+String(i)+"&transaction_id="+m_strTransactionId);
-      httpGetRequest(HOST_IP_ADDRESS, "/confirm-done?transaction_id=" + m_strTransactionId + "&device_id=" + m_straBinId[i]);
+      // Client_HttpGetRequest(HOST_ADDRESS, "/confirm-done?bin_id="+String(i)+"&transaction_id="+m_strTransactionId);
+      if(Client_HttpGetRequest(HOST_ADDRESS, "/confirm-done?transaction_id=" + m_strTransactionId + "&device_id=" + m_straBinId[i])){
+        //Get Serial Data
+        if (Client_ReceiveJsonData('<', '>') != "") {
+          //Parse API
+          Serial.println(m_strRawClientData);
+          Client_JsonParsingPickingsConfirmation(i);
 
-      //Get Serial Data
-      if (recvWithStartEndMarkers('<', '>') != "") {
-        //Parse API
-        Serial.println(m_strRawClientData);
-        JsonParsing_PickingsConfirmation(i);
-
-        //Turn Off LED & Update LCD
-        if (m_zaBinStatus[i] == false) {
-          //Turn Off LED
-          LCD_DisplayStock(i);
-          delay(50);
-          digitalWrite(PIN_LED[i], LOW);
+          //Turn Off LED & Update LCD
+          if (m_zaBinStatus[i] == false) {
+            //Turn Off LED
+            Lcd_DisplayStock(i);
+            delay(50);
+            digitalWrite(PIN_LED[i], LOW);
+          }
+          m_zaIsButtonPressed[i] = false;
         }
-        m_zaIsButtonPressed[i] = false;
       }
     }
   }
@@ -566,7 +572,7 @@ void checkRtuState() {
       m_zaIsRtuConnected[i] = true;
       Serial.println("RTU Was Connected : " + String(i));
       Serial.println(m_zaIsRtuConnected[i]);
-      LCD_DisplayStock(i);
+      Lcd_DisplayStock(i);
     }
 
     // RTU just disconnected and last state is connected
