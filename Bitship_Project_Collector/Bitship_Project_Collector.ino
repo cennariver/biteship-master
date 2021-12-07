@@ -144,8 +144,6 @@ void setup() {
 }
 
 void loop() {
-  // TODO remove lcd display inside this function
-  checkRtuState();
 
   m_ulCurrentMillis = millis();
 
@@ -160,8 +158,9 @@ void loop() {
         if(Client_ReceiveJsonData('<', '>') != "") {
           Serial.println(m_strRawClientData);
           Client_JsonParsingCurrentData();
-          Lcd_DisplayStock();
           clearBuffer();
+          // PRINT: display stock data on connected RTU
+          checkAndDisplayConnectedRtu();
 
           l_baRtuState[RTU_STATE_FIRST_LAYER] = RTU_STATE_IDLE;
         }
@@ -169,28 +168,26 @@ void loop() {
       break;
 
     case RTU_STATE_IDLE:
-      // PRINT: display stock data
-      // TODO try uncomment this to always display stock to lcd in idle state
-//      Lcd_DisplayStock();
+      // PRINT: display stock data on connected RTU
+      checkAndDisplayConnectedRtu();
 
       // get available transaction every specific period
       if (m_ulCurrentMillis - m_ulLastHitApiGetTransaction >= GET_TRANSACTION_PERIOD_TIME) {
 
         Serial.println(API_GET_TRANSACTION);
-
         if(Client_HttpGetRequest(HOST_ADDRESS, API_GET_TRANSACTION)){
-            // listen for the transaction
-            if(Client_ReceiveJsonData('<', '>') != "") {
-              Serial.println(m_strRawClientData);
-              //Parsing raw Transaction Json Data if transaction exist
-              if (Client_JsonParsingTransactionData()) {
-                Serial.print("transaction IDs :");
-                Serial.println(m_strTransactionId);
-                l_baRtuState[RTU_STATE_FIRST_LAYER] = RTU_STATE_TRANSACTION;
-              }
-              //Clear
-              clearBuffer();
+          // listen for the transaction
+          if(Client_ReceiveJsonData('<', '>') != "") {
+            Serial.println(m_strRawClientData);
+            //Parsing raw Transaction Json Data if transaction exist
+            if (Client_JsonParsingTransactionData()) {
+              Serial.print("transaction IDs :");
+              Serial.println(m_strTransactionId);
+              l_baRtuState[RTU_STATE_FIRST_LAYER] = RTU_STATE_TRANSACTION;
             }
+            //Clear
+            clearBuffer();
+          }
         }
         m_ulLastHitApiGetTransaction = m_ulCurrentMillis;
       }
@@ -214,7 +211,6 @@ void loop() {
                 Serial.println();
 
                 // PRINT: display active RTU
-                // TODO try to move this outside this if to always print LCD
                 Client_ActivateTransaction();
                 l_baRtuState[RTU_STATE_SECOND_LAYER] = RTU_STATE_TRANSACTION_CONFIRMATION;
               }
@@ -222,7 +218,7 @@ void loop() {
           break;
 
         case RTU_STATE_TRANSACTION_CONFIRMATION:
-          //Check Push Button For confirming Transaction (HIT API)
+          //check push button for confirming ongoing Transaction
           Client_DeactivateTransaction();
 
           //check active transaction
@@ -231,13 +227,17 @@ void loop() {
             // PRINT: display stock data for idle RTU and display transaction data for active RTU
             if (m_zaBinStatus[i] == true) {
               l_iActiveTransaction++;
+              // LCD Update
               Lcd_TransactionOngoing(i);
-            }else{
+              digitalWrite(PIN_LED[i], HIGH); //LED ON
+            }
+            else {
               Lcd_DisplayStock(i);
+              digitalWrite(PIN_LED[i], LOW); //LED OFF
             }
           }
 
-          //transaction done
+          //transaction done, back to IDLE state
           if(l_iActiveTransaction == 0) {
             m_strTransactionId = "";
             l_baRtuState[RTU_STATE_FIRST_LAYER] = RTU_STATE_IDLE;
@@ -383,12 +383,7 @@ String Client_ReceiveJsonData(char p_bStartMarker, char p_bEndMarker) {
     }
   }
 
-  if (l_zNewData == true) {
-    Serial.println(l_baReceivedChars);
-  }
-
-  m_strRawClientData = String(l_baReceivedChars);
-  return m_strRawClientData;
+  return m_strRawClientData = (l_zNewData == true) ? String(l_baReceivedChars) : "";
 }
 
 //Parsing CurrentData
@@ -534,14 +529,6 @@ void Client_DeactivateTransaction() {
           //Parse API
           Serial.println(m_strRawClientData);
           Client_JsonParsingPickingsConfirmation(i);
-
-          //Turn Off LED & Update LCD
-          if (m_zaBinStatus[i] == false) {
-            //Turn Off LED
-            Lcd_DisplayStock(i);
-            delay(50);
-            digitalWrite(PIN_LED[i], LOW);
-          }
           m_zaIsButtonPressed[i] = false;
         }
       }
@@ -563,24 +550,25 @@ void clearBuffer() {
   }
 }
 
-void checkRtuState() {
+void checkAndDisplayConnectedRtu() {
   for (int i = 0; i < RTU_TOTAL; i++) {
 
-    // RTU just connected and last state is not connected
+    // RTU just connected and last state is not connected = new device connected
     if (digitalRead(PIN_DETECT_RU[i]) == LOW && m_zaIsRtuConnected[i] == false){
       delay(100);
       m_zaIsRtuConnected[i] = true;
       Serial.println("RTU Was Connected : " + String(i));
       Serial.println(m_zaIsRtuConnected[i]);
-      Lcd_DisplayStock(i);
+      Lcd_DisplayStock();
     }
 
-    // RTU just disconnected and last state is connected
+    // RTU just disconnected and last state is connected = device disconnected
     if (digitalRead(PIN_DETECT_RU[i]) == HIGH && m_zaIsRtuConnected[i] == true) {
       delay(100);
       m_zaIsRtuConnected[i] = false;
       Serial.println("RTU Was Disconnected : " + String(i));
       Serial.println(m_zaIsRtuConnected[i]);
+      // TODO what happened if RTU is disconnected ?
     }
   }
 }
