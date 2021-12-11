@@ -56,8 +56,9 @@ int m_iStatus = WL_IDLE_STATUS;
 
 /** Client **/
 WiFiEspClient m_oClient;
-const char            COLLECTOR_IDENTIFIER          = 1;
+const String          COLLECTOR_IDENTIFIER          = "1";
 const unsigned long   CLIENT_CONNECTING_TIMEOUT     = 3000;
+boolean m_zIsGetRequest = true;
 // TODO try to remove String in COLLECTOR_IDENTIFIER changed data type
 const String      API_GET_CURRENT_DATA      = "/get-current-data-by-collector/" + String(COLLECTOR_IDENTIFIER);
 const String      API_GET_TRANSACTION       = "/get-transaction-by-collector/" + String(COLLECTOR_IDENTIFIER);
@@ -153,7 +154,13 @@ void loop() {
       // PRINT: get current stock data for the first time
       Lcd_Print("Connected to WiFi", "Search master API");
 
-      if(Client_HttpGetRequest(HOST_ADDRESS, API_GET_CURRENT_DATA)){
+      if(m_zIsGetRequest){
+        if(Client_HttpGetRequest(HOST_ADDRESS, API_GET_CURRENT_DATA)){
+          m_zIsGetRequest = false;
+        }
+      }
+      
+      if(!m_zIsGetRequest){
         // listen for current stock data
         if(Client_ReceiveJsonData('<', '>') != "") {
           Serial.println(m_strRawClientData);
@@ -359,7 +366,7 @@ String Client_ReceiveJsonData(char p_bStartMarker, char p_bEndMarker) {
   static int l_iNdx = 0;
   char l_chRc;
   boolean l_zNewData = false;
-
+  
   while (m_oClient.available() > 0 && l_zNewData == false) {
     l_chRc = m_oClient.read();
 
