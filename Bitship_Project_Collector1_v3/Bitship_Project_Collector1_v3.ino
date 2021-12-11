@@ -1,4 +1,6 @@
 // include the library code:
+#include <Arduino.h>
+
 #include <LiquidCrystal.h>
 #include <ArduinoJson.h>
 #include "WiFiEsp.h"
