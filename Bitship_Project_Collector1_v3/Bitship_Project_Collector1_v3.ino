@@ -20,17 +20,21 @@ const unsigned long PERIOD_TIME = 6000;
 //const char m_chaPass[] = "qwerty123456";        // your network m_chPassword
 //const char m_chaSsid[] = "c7";            // your network m_chaSsid (name)
 //const char m_chaPass[] = "da645591";        // your network m_chPassword
-const char m_chaSsid[] = "Warehouse Biteship";            // your network m_chaSsid (name)
-const char m_chaPass[] = "Bismilahlancar";        // your network m_chPassword
+//const char m_chaSsid[] = "Warehouse Biteship";            // your network m_chaSsid (name)
+//const char m_chaPass[] = "Bismilahlancar";        // your network m_chPassword
 //const char m_chaSsid[] = "Diskum_723";            // your network m_chaSsid (name)
 //const char m_chaPass[] = "19283746abcd";
+const char m_chaSsid[] = "LAN";            // your network m_chaSsid (name)
+const char m_chaPass[] = "LAN43406";
 
 
 int m_iStatus = WL_IDLE_STATUS;     // the Wifi radio's status
 //char m_chaServer[] = "061e-182-2-170-99.ngrok.io";
 //String m_strHost = "061e-182-2-170-99.ngrok.io";
-char m_chaServer[] = "192.168.0.6";
-String m_strHost = "192.168.0.6";
+//char m_chaServer[] = "192.168.0.6";
+//String m_strHost = "192.168.0.6";
+char m_chaServer[] = "192.168.1.7";
+String m_strHost = "192.168.1.7";
 String m_strAtResponse;
 unsigned long m_ulLastConnectionTime = 0;         // last time you connected to the server, in milliseconds
 const unsigned long POSTING_INTERVAL = 10000L; // delay between updates, in milliseconds
