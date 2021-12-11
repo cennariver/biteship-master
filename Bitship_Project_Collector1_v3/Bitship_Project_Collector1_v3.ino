@@ -4,6 +4,11 @@
 #include "WiFiEsp.h"
 
 
+
+//
+String m_strConnectedDevice;
+bool m_zCheckDevicesCmd = true,m_zCheckDevicesRetrive, m_zCheckDevicesFinished;
+bool m_zGetCurrentDataCmd, m_zGetCurrentDataRetrive;
 //Delay
 unsigned long m_ulStartMillis;  //some global variables available anywhere in the program
 unsigned long m_ulCurrentMillis;
@@ -62,6 +67,7 @@ const int PIN_DETECT_RU[RTU_TOTAL] = {0, A15, A14, A13, A12, A11, A10, A9, A8, A
 bool m_zaRtuState[RTU_TOTAL] = {false, false, false, false, false, false, false, false, false, false, false};
 //const int RU_ANALOG_DETECTION_TRESHOL D = 512;
 //API List
+const String API_REGISTER_RU = "/get-current-data-by-collector/1";
 const String API_GET_CURRENT_DATA = "/get-current-data-by-collector/1";
 const String API_GET_TRANSACTION = "/get-transaction-by-collector/1";
 const String API_TRANSACTION_CONFIRM = "/confirm-on-process-by-collector/1";
@@ -85,6 +91,7 @@ bool m_zConfirmationStatus = false;
 
 //API Data
 String m_strRawData;
+String m_strRawRegisterRU;
 String m_strRawStockData;
 String m_strRawTransactionData;
 String m_strRawTransactionConfirmation;
@@ -180,41 +187,88 @@ void loop() {
 
   //Run 1st Command
   if (m_zFirstRun == false) {    
-    
-    LCDprint(m_oRtuLcd1, "Search raspi API", "get current data");
-    LCDprint(m_oRtuLcd2, "Search raspi API", "get current data");
-    LCDprint(m_oRtuLcd3, "Search raspi API", "get current data");
-    LCDprint(m_oRtuLcd4, "Search raspi API", "get current data");
-    LCDprint(m_oRtuLcd5, "Search raspi API", "get current data");
-    LCDprint(m_oRtuLcd6, "Search raspi API", "get current data");
-    LCDprint(m_oRtuLcd7, "Search raspi API", "get current data");
-    LCDprint(m_oRtuLcd8, "Search raspi API", "get current data");
-    LCDprint(m_oRtuLcd9, "Search raspi API", "get current data");
-    LCDprint(m_oRtuLcd10, "Search raspi API", "get current data");
-    
-    httpGetRequest(m_strHost, API_GET_CURRENT_DATA);
-    m_zaWaitSerial[0] = true;
-    m_zFirstRun = true;
-  }
 
-  //Wait For 1st Initial Data
-  if (m_zaWaitSerial[0] == true) {
-    m_strRawStockData = recvWithStartEndMarkers('<', '>');
+     //Post Connected Devices
+    if (m_zCheckDevicesCmd == true){
+      LCDprint(m_oRtuLcd9, "Register", "RU");
+      //Convert RTU Connected State to String
+      m_strConnectedDevice = "{Collector :1,Status:[";
+      for(int i =0;i<10;i++){
+         m_strConnectedDevice +=  (String)m_zaRtuState[i]+",";
+       if(i==9){
+         m_strConnectedDevice +=  (String)m_zaRtuState[i];
+       }
+      }
+      m_strConnectedDevice = "]}";
+      //Hit API Get Check Connected Devices
+      httpPostRequest(m_strHost, API_REGISTER_RU, m_strConnectedDevice);
+      //Exit Command Get Current Data
+      m_zCheckDevicesCmd = false;
+      //Start Recive Get Current Data Serial
+      m_zCheckDevicesRetrive = true;
+    }
 
-    if (m_strRawStockData != "") {
-      getInitialData();
-      Serial.println(m_strRawStockData);
-      m_zaWaitSerial[0] = false;
-      m_zaWaitSerialCommand[1] = true;
-      clearBuffer();
-      for (int i = 0; i <= RECEIVED_CHAR_LENGTH; i++) {
-        m_chaReceivedChars[i] = NULL;
+     //Wait For 1st Initial Data
+    if (m_zCheckDevicesRetrive == true) {
+      //Collect Serial Data from Buffer
+      m_strRawRegisterRU = recvWithStartEndMarkers('<', '>');
+      //Check Collected Data Completed
+      if (m_strRawRegisterRU != "") {
+        //Parsing Data
+        JsonParsing_RegisterConfirmation();
+        LCDprint(m_oRtuLcd9, "Register", "Completed");  
+        //Clear buffer after completed
+        clearBuffer();
+        for (int i = 0; i <= RECEIVED_CHAR_LENGTH; i++) {
+          m_chaReceivedChars[i] = NULL;
+        }
+        //Trigger Listen Transaction
+        m_zCheckDevicesRetrive = false;
+        
+        //End First Run
+        m_zGetCurrentDataCmd = true;
       }
     }
+    
+    //Get Current Data
+    if (m_zGetCurrentDataCmd == true){
+      LCDprint(m_oRtuLcd9, "Search raspi API", "get current data");
+      //Hit API Get Current Data
+      httpGetRequest(m_strHost, API_GET_CURRENT_DATA);
+      //Exit Command Get Current Data
+      m_zGetCurrentDataCmd = false;
+      //Start Recive Get Current Data Serial
+      m_zGetCurrentDataRetrive = true;
+    }
+
+    //Wait For 1st Initial Data
+    if (m_zGetCurrentDataRetrive == true) {
+      //Collect Serial Data from Buffer
+      m_strRawStockData = recvWithStartEndMarkers('<', '>');
+      //Check Collected Data Completed
+      if (m_strRawStockData != "") {
+        //Parsing & Print LCD
+        getInitialData();
+        //Clear buffer after completed
+        clearBuffer();
+        for (int i = 0; i <= RECEIVED_CHAR_LENGTH; i++) {
+          m_chaReceivedChars[i] = NULL;
+        }
+        //Stop Retrive Current Data
+        m_zGetCurrentDataRetrive = false;
+        //End First Run
+        m_zFirstRun = false;
+        //Trigger Listen Transaction
+        m_zaWaitSerialCommand[1] = true;
+      }
+    }
+   
   }
 
+ 
+
   // TODO try with else only
-  if (m_zaWaitSerial[0] == false) {
+  if (m_zFirstRun == false) {
     //Listen For New Transaction
     listenTransaction();
     //Check Transaction Status
@@ -291,25 +345,52 @@ void connectWifi() {
   Serial.println("You're connected to the network");
 }
 
-String httpGetRequest (String p_strHostAddress, String p_strQuery) {
-  
+void httpPostRequest (String p_strHostAddress, String p_strQuery, String payload) {
   bool l_zIsConnected = false;
-  unsigned long l_ulStartConnectingTime = millis();
-  unsigned long l_ulCurrentConnectingTime = millis();
-  
   while(!l_zIsConnected) {
     //Close All Socket
     m_oClient.stop();
-    
     l_zIsConnected = m_oClient.connect(m_chaServer, CONNECTING_TIMEOUT);
     Serial.println("Attempting to connect to raspi API: " + String(m_chaServer));
+  }
 
-    l_ulCurrentConnectingTime = millis();
+  // if there's a successful connection
+  if (l_zIsConnected) {
+    Serial.println("Connected");
+    Serial.println(p_strQuery);
+    // send the HTTP GET request
+    m_oClient.println(("GET " + p_strQuery + " HTTP/1.1")); 
+    m_oClient.println(("Host: " + p_strHostAddress));
+    m_oClient.println((payload));
+    m_oClient.println(("Content-Type: application/json"));
+    m_oClient.println("Connection: close");
+    m_oClient.println();
+  }
+  else {
+    // if you couldn't make a connection
+    
+    LCDprint(m_oRtuLcd1, "Failed", "Restart Collector");
+    LCDprint(m_oRtuLcd2, "Failed", "Restart Collector");
+    LCDprint(m_oRtuLcd3, "Failed", "Restart Collector");
+    LCDprint(m_oRtuLcd4, "Failed", "Restart Collector");
+    LCDprint(m_oRtuLcd5, "Failed", "Restart Collector");
+    LCDprint(m_oRtuLcd6, "Failed", "Restart Collector");
+    LCDprint(m_oRtuLcd7, "Failed", "Restart Collector");
+    LCDprint(m_oRtuLcd8, "Failed", "Restart Collector");
+    LCDprint(m_oRtuLcd9, "Failed", "Restart Collector");
+    LCDprint(m_oRtuLcd10, "Failed", "Restart Collector");
+    
+    Serial.println("Connection failed, please restart related collector");
+  }
+}
 
-    // failed, break loop TODO check for timeout
-//    if((l_ulCurrentConnectingTime - l_ulStartConnectingTime) > CONNECTING_TIMEOUT){
-//      break;
-//    }
+void httpGetRequest (String p_strHostAddress, String p_strQuery) {
+  bool l_zIsConnected = false;
+  while(!l_zIsConnected) {
+    //Close All Socket
+    m_oClient.stop();
+    l_zIsConnected = m_oClient.connect(m_chaServer, CONNECTING_TIMEOUT);
+    Serial.println("Attempting to connect to raspi API: " + String(m_chaServer));
   }
 
   // if there's a successful connection
@@ -318,8 +399,6 @@ String httpGetRequest (String p_strHostAddress, String p_strQuery) {
     // send the HTTP GET request
     m_oClient.println(("GET " + p_strQuery + " HTTP/1.1"));
     Serial.println(p_strQuery);
-    //m_oClient.println(F("GET /get-current-data-by-collector/1 HTTP/1.1"));
-    //m_oClient.println(F("Host: 83f3-182-253-87-219.ngrok.io"));
     m_oClient.println(("Host: " + p_strHostAddress));
     m_oClient.println("Connection: close");
     m_oClient.println();
@@ -340,8 +419,6 @@ String httpGetRequest (String p_strHostAddress, String p_strQuery) {
     
     Serial.println("Connection failed, please restart related collector");
   }
-
-  return m_strRawData;
 }
 
 //Parsing CurrentData
@@ -455,6 +532,22 @@ void JsonParsing_PickingsConfirmation(int p_iBinIds) {
     else {
       //Do Nothing
     }
+  }
+}
+
+//Parsing CurrentData
+void JsonParsing_RegisterConfirmation() {
+  StaticJsonDocument<300> l_oParsedData;
+  DeserializationError l_oError = deserializeJson(l_oParsedData, m_strRawRegisterRU);
+
+  if (l_oError) {
+    Serial.println("Error Parsing Register Confirmation");
+  }
+  //Parsing the Data And Move to Global Var
+  else {
+    //Transaction_Status
+    JsonObject l_oJsonTransactionData = l_oParsedData["data"];
+    m_strTransactionExecution = (const char*)l_oJsonTransactionData["status"];
   }
 }
 
