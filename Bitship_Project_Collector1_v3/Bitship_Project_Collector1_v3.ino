@@ -67,13 +67,11 @@ const int PIN_DETECT_RU[RTU_TOTAL] = {0, A15, A14, A13, A12, A11, A10, A9, A8, A
 bool m_zaRtuState[RTU_TOTAL] = {false, false, false, false, false, false, false, false, false, false, false};
 //const int RU_ANALOG_DETECTION_TRESHOL D = 512;
 //API List
-const String API_REGISTER_RU = "/get-current-data-by-collector/1";
-const String API_GET_CURRENT_DATA = "/get-current-data-by-collector/1";
-const String API_GET_TRANSACTION = "/get-transaction-by-collector/1";
-const String API_TRANSACTION_CONFIRM = "/confirm-on-process-by-collector/1";
-//const String API_GET_CURRENT_DATA = "/get-current-data-by-collector/2";
-//const String API_GET_TRANSACTION = "/get-transaction-by-collector/2";
-//const String API_TRANSACTION_CONFIRM = "/confirm-on-process-by-collector/2";
+const String COLLECTOR_IDENTIFIER = "1";
+const String API_REGISTER_RU = "/ru-registration-collector/" + COLLECTOR_IDENTIFIER;
+const String API_GET_CURRENT_DATA = "/get-current-data-by-collector/" + COLLECTOR_IDENTIFIER;
+const String API_GET_TRANSACTION = "/get-transaction-by-collector/"+ COLLECTOR_IDENTIFIER;
+const String API_TRANSACTION_CONFIRM = "/confirm-on-process-by-collector/" + COLLECTOR_IDENTIFIER;
 const String API_PICKING_CONFIRM = "/confirm-done?bin_id=";
 //RU Var Init
 String m_straSkuName[RTU_TOTAL];
@@ -186,26 +184,29 @@ void loop() {
   m_ulCurrentMillis = millis();
 
   //Run 1st Command
-  if (m_zFirstRun == false) {    
+  if (m_zFirstRun == false) {
 
      //Post Connected Devices
     if (m_zCheckDevicesCmd == true){
       LCDprint(m_oRtuLcd9, "Register", "RU");
       //Convert RTU Connected State to String
-      m_strConnectedDevice = "{Collector :1,Status:[";
+      m_strConnectedDevice = "{\"collector\": 1, \"status\": [";
       for(int i =0;i<10;i++){
          m_strConnectedDevice +=  (String)m_zaRtuState[i]+",";
        if(i==9){
          m_strConnectedDevice +=  (String)m_zaRtuState[i];
        }
       }
-      m_strConnectedDevice = "]}";
+      m_strConnectedDevice += "]}";
       //Hit API Get Check Connected Devices
       httpPostRequest(m_strHost, API_REGISTER_RU, m_strConnectedDevice);
       //Exit Command Get Current Data
       m_zCheckDevicesCmd = false;
       //Start Recive Get Current Data Serial
       m_zCheckDevicesRetrive = true;
+
+
+    //  httpGetRequest(m_strHost, API_REGISTER_RU);
     }
 
      //Wait For 1st Initial Data
@@ -216,7 +217,7 @@ void loop() {
       if (m_strRawRegisterRU != "") {
         //Parsing Data
         JsonParsing_RegisterConfirmation();
-        LCDprint(m_oRtuLcd9, "Register", "Completed");  
+        LCDprint(m_oRtuLcd9, "Register", "Completed");
         //Clear buffer after completed
         clearBuffer();
         for (int i = 0; i <= RECEIVED_CHAR_LENGTH; i++) {
@@ -224,12 +225,12 @@ void loop() {
         }
         //Trigger Listen Transaction
         m_zCheckDevicesRetrive = false;
-        
+
         //End First Run
         m_zGetCurrentDataCmd = true;
       }
     }
-    
+
     //Get Current Data
     if (m_zGetCurrentDataCmd == true){
       LCDprint(m_oRtuLcd9, "Search raspi API", "get current data");
@@ -262,10 +263,10 @@ void loop() {
         m_zaWaitSerialCommand[1] = true;
       }
     }
-   
+
   }
 
- 
+
 
   // TODO try with else only
   if (m_zFirstRun == false) {
@@ -358,17 +359,24 @@ void httpPostRequest (String p_strHostAddress, String p_strQuery, String payload
   if (l_zIsConnected) {
     Serial.println("Connected");
     Serial.println(p_strQuery);
+
     // send the HTTP GET request
-    m_oClient.println(("GET " + p_strQuery + " HTTP/1.1")); 
+    m_oClient.println(("POST " + p_strQuery + " HTTP/1.1"));
+    Serial.println(("POST " + p_strQuery + " HTTP/1.1"));
     m_oClient.println(("Host: " + p_strHostAddress));
-    m_oClient.println((payload));
+    Serial.println(("Host: " + p_strHostAddress));
+    m_oClient.println("Accept: application/json");
     m_oClient.println(("Content-Type: application/json"));
-    m_oClient.println("Connection: close");
+    Serial.println(("Content-Type: application/json"));
+    m_oClient.println("Content-Length: " +String(payload.length() +1));
+    Serial.println("Content-Length: " +String(payload.length() + 1));
     m_oClient.println();
+    m_oClient.println((payload));
+    Serial.println((payload));
   }
   else {
     // if you couldn't make a connection
-    
+
     LCDprint(m_oRtuLcd1, "Failed", "Restart Collector");
     LCDprint(m_oRtuLcd2, "Failed", "Restart Collector");
     LCDprint(m_oRtuLcd3, "Failed", "Restart Collector");
@@ -379,7 +387,7 @@ void httpPostRequest (String p_strHostAddress, String p_strQuery, String payload
     LCDprint(m_oRtuLcd8, "Failed", "Restart Collector");
     LCDprint(m_oRtuLcd9, "Failed", "Restart Collector");
     LCDprint(m_oRtuLcd10, "Failed", "Restart Collector");
-    
+
     Serial.println("Connection failed, please restart related collector");
   }
 }
@@ -405,7 +413,7 @@ void httpGetRequest (String p_strHostAddress, String p_strQuery) {
   }
   else {
     // if you couldn't make a connection
-    
+
     LCDprint(m_oRtuLcd1, "Failed", "Restart Collector");
     LCDprint(m_oRtuLcd2, "Failed", "Restart Collector");
     LCDprint(m_oRtuLcd3, "Failed", "Restart Collector");
@@ -416,7 +424,7 @@ void httpGetRequest (String p_strHostAddress, String p_strQuery) {
     LCDprint(m_oRtuLcd8, "Failed", "Restart Collector");
     LCDprint(m_oRtuLcd9, "Failed", "Restart Collector");
     LCDprint(m_oRtuLcd10, "Failed", "Restart Collector");
-    
+
     Serial.println("Connection failed, please restart related collector");
   }
 }
