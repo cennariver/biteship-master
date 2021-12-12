@@ -5,12 +5,11 @@
 
 
 /** PIN Setting */
-const int REMOTE_UNIT_AMOUNT = 10;
-// TODO try char data type to digital pin
-const int     PIN_D4        = 25;
-const int     PIN_D5        = 24;
-const int     PIN_D6        = 23;
-const int     PIN_D7        = 22;
+const uint8_t     REMOTE_UNIT_AMOUNT = 10;
+const uint8_t     PIN_D4             = 25;
+const uint8_t     PIN_D5             = 24;
+const uint8_t     PIN_D6             = 23;
+const uint8_t     PIN_D7             = 22;
 LiquidCrystal m_oaRtu[REMOTE_UNIT_AMOUNT] = {
     LiquidCrystal (27, 26, PIN_D4, PIN_D5, PIN_D6, PIN_D7), // RTU_NUMBER_ONE
     LiquidCrystal (29, 28, PIN_D4, PIN_D5, PIN_D6, PIN_D7), // RTU_NUMBER_TWO
@@ -24,13 +23,13 @@ LiquidCrystal m_oaRtu[REMOTE_UNIT_AMOUNT] = {
     LiquidCrystal (45, 44, PIN_D4, PIN_D5, PIN_D6, PIN_D7)  // RTU_NUMBER_TEN
 };
 //Pin for LED
-const int PIN_LED[REMOTE_UNIT_AMOUNT]      = {47, 46, 50, 52, 17, 16, 15, 14, 48, 49};
+const uint8_t PIN_LED[REMOTE_UNIT_AMOUNT]        = {47, 46, 50, 52, 17, 16, 15, 14, 48, 49};
 //Pin for Push Button
-const int PIN_BUTTON[REMOTE_UNIT_AMOUNT]   = {2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
-bool m_zaIsButtonPressed[REMOTE_UNIT_AMOUNT] = {false, false, false, false, false, false, false, false, false, false};
+const uint8_t PIN_BUTTON[REMOTE_UNIT_AMOUNT]     = {2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
+bool m_zaIsButtonPressed[REMOTE_UNIT_AMOUNT]     = {false, false, false, false, false, false, false, false, false, false};
 //Pin for RTU Detector
-const int PIN_DETECT_RU[REMOTE_UNIT_AMOUNT]  = {A15, A14, A13, A12, A11, A10, A9, A8, A7, A6};
-bool m_zaIsRtuConnected[REMOTE_UNIT_AMOUNT]  = {false, false, false, false, false, false, false, false, false, false};
+const uint8_t PIN_DETECT_RU[REMOTE_UNIT_AMOUNT]  = {A15, A14, A13, A12, A11, A10, A9, A8, A7, A6};
+bool m_zaIsRtuConnected[REMOTE_UNIT_AMOUNT]      = {false, false, false, false, false, false, false, false, false, false};
 
 
 /** Wifi */
@@ -44,45 +43,44 @@ bool m_zaIsRtuConnected[REMOTE_UNIT_AMOUNT]  = {false, false, false, false, fals
 //const char    WIFI_PASSWORD[]     = "19283746abcd";
 const char    WIFI_SSID[]         = "LAN";            // your network m_chaSsid (name)
 const char    WIFI_PASSWORD[]     = "LAN43406";
-int m_iStatus = WL_IDLE_STATUS;
+uint8_t m_iStatus = WL_IDLE_STATUS;
 WiFiEspClient m_oClient;
 
 
 /** Client */
-const String COLLECTOR_IDENTIFIER = "1";
-const String API_REGISTER_RU = "/ru-registration-collector/" + COLLECTOR_IDENTIFIER;
-const String API_GET_CURRENT_DATA = "/get-current-data-by-collector/" + COLLECTOR_IDENTIFIER;
-const String API_GET_TRANSACTION = "/get-transaction-by-collector/"+ COLLECTOR_IDENTIFIER;
-const String API_TRANSACTION_CONFIRM = "/confirm-on-process-by-collector/" + COLLECTOR_IDENTIFIER;
-const String API_PICKING_CONFIRM = "/confirm-done?bin_id=";
+const String   COLLECTOR_IDENTIFIER      = "1";
+const String   API_REGISTER_RU           = "/ru-registration-collector/" + COLLECTOR_IDENTIFIER;
+const String   API_GET_CURRENT_DATA      = "/get-current-data-by-collector/" + COLLECTOR_IDENTIFIER;
+const String   API_GET_TRANSACTION       = "/get-transaction-by-collector/"+ COLLECTOR_IDENTIFIER;
+const String   API_TRANSACTION_CONFIRM   = "/confirm-on-process-by-collector/" + COLLECTOR_IDENTIFIER;
+const String   API_PICKING_CONFIRM       = "/confirm-done?bin_id=";
 //receive global variable
-bool l_bIsSerialReceive = false;
-const int RECEIVED_CHAR_LENGTH = 1500;
-char m_caReceivedChars[RECEIVED_CHAR_LENGTH];
+const int RECEIVED_CHAR_LENGTH         = 1500;
 String m_strRawReceivedData;
-bool m_bNewData = false;
-//const char HOST_ADDRESS[] = "192.168.0.6";
-const char HOST_ADDRESS[] = "192.168.1.7";
-const int HOST_PORT = 3000;
+bool l_zIsSerialReceive = false;
+bool m_zNewData = false;
+//const char     HOST_ADDRESS[]  = "192.168.0.6";
+const char     HOST_ADDRESS[]  = "192.168.1.7";
+const int      HOST_PORT       = 3000;
 //state
-const char RU_STATE_FIRST_LAYER = 0;
-const char RU_STATE_SECOND_LAYER = RU_STATE_FIRST_LAYER + 1;
-const char RU_STATE_LAYER_THICKNESS = RU_STATE_SECOND_LAYER + 1;
-char m_caRtuState[RU_STATE_LAYER_THICKNESS];
+const uint8_t  RU_STATE_FIRST_LAYER          = 0;
+const uint8_t  RU_STATE_SECOND_LAYER         = RU_STATE_FIRST_LAYER + 1;
+const uint8_t  RU_STATE_LAYER_THICKNESS      = RU_STATE_SECOND_LAYER + 1;
+uint8_t m_iaRtuState[RU_STATE_LAYER_THICKNESS];
 //state first layer
-const char RU_STATE_REGISTRATION = 0;
-const char RU_STATE_READY = RU_STATE_REGISTRATION + 1;
-const char RU_STATE_IDLE = RU_STATE_READY + 1;
-const char RU_STATE_TRANSACTION = RU_STATE_IDLE + 1;
+const uint8_t  RU_STATE_REGISTRATION         = 0;
+const uint8_t  RU_STATE_READY                = RU_STATE_REGISTRATION + 1;
+const uint8_t  RU_STATE_IDLE                 = RU_STATE_READY + 1;
+const uint8_t  RU_STATE_TRANSACTION          = RU_STATE_IDLE + 1;
 //state second layer
-const char RU_STATE_TRANSACTION_ACTIVE = 0;
-const char RU_STATE_TRANSACTION_CONFIRMATION = RU_STATE_TRANSACTION_ACTIVE + 1;
+const uint8_t  RU_STATE_TRANSACTION_ACTIVE         = 0;
+const uint8_t  RU_STATE_TRANSACTION_CONFIRMATION   = RU_STATE_TRANSACTION_ACTIVE + 1;
 //RU state-ready variable
 String m_straSkuName[REMOTE_UNIT_AMOUNT];
 int m_iaSkuQty[REMOTE_UNIT_AMOUNT];
 //RU state-idle variable
-unsigned long m_ulLastGetActiveTransactionApi = 0;
-unsigned long PERIOD_TIME_GET_ACTIVE_TRANSACTION = 6000;
+const unsigned long  PERIOD_TIME_GET_ACTIVE_TRANSACTION = 6000;
+unsigned long m_lLastGetActiveTransactionApi = 0;
 String m_strTransactionId;
 bool m_zaBinStatus[REMOTE_UNIT_AMOUNT]; // transaction status exist or not
 String m_straBinId[REMOTE_UNIT_AMOUNT];
@@ -111,213 +109,203 @@ void setup() {
   }
 
   //Initiate Serial Communication
-  Lcd_Print("Initiate WiFi", "Please Wait");
-
   //For ESP01
   Serial1.begin(115200);
   Serial1.setTimeout(5000);
   WiFi.init(&Serial1);
-
   //For Arduino Serial
   Serial.begin(115200);
-
   //Clear Buffer
   clearBuffer();
 
   //Initiate ESP8266 Startup
   Wifi_ConnectToNetwork();
 
-  //check connected device
-  for (int i = 0; i < REMOTE_UNIT_AMOUNT; i++) {
-    // Check the availability of RTU
-    if(digitalRead(PIN_DETECT_RU[i]) == LOW) {
-      // RTU connected
-      m_zaIsRtuConnected[i] = true;
-      // Display on LCD that RTU is waiting for running code
-      Serial.println("Connect: C" + COLLECTOR_IDENTIFIER + "B" + String(i+1));
-      Lcd_Print(m_oaRtu[i], "Wifi Connected", "C" + COLLECTOR_IDENTIFIER + "B" + String(i+1) + " Please Wait");
-    }
-    else{
-      // RTU disconnected
-      m_zaIsRtuConnected[i] = false;
-      Serial.println("Disonnect: C" + COLLECTOR_IDENTIFIER + "B" + String(i+1));
-    }
-  }
+  //set rtu connected state
+  setRtuState();
 }
 
 void loop() {
 
   m_ulCurrentMillis = millis();
 
-  switch (m_caRtuState[RU_STATE_FIRST_LAYER]) {
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("WiFi Status: " + (WiFi.status() == WL_CONNECTED) ? "WL_CONNECTED":String(WiFi.status()));
 
-    case RU_STATE_REGISTRATION:
-      //display to LCD: registering device
-      Lcd_PrintRegisteringDevice();
+    switch (m_iaRtuState[RU_STATE_FIRST_LAYER]) {
 
-      // request
-      if (!l_bIsSerialReceive) {
-        //construct registering device in json format
-        String l_strConnectedDevice = "{\"collector\": " + COLLECTOR_IDENTIFIER + ", \"status\": [";
-        for (int i = 0; i < REMOTE_UNIT_AMOUNT; i++) {
-          l_strConnectedDevice += (i!=(REMOTE_UNIT_AMOUNT-1)) ? (String)m_zaIsRtuConnected[i]+"," : (String)m_zaIsRtuConnected[i];
-        }
-        l_strConnectedDevice += "]}";
-
-        // Post to API register
-        if(httpPostRequest(API_REGISTER_RU, l_strConnectedDevice)){
-          l_bIsSerialReceive = true;
-        }
-      }
-
-      // receive
-      if (l_bIsSerialReceive) {
-        m_strRawReceivedData = recvWithStartEndMarkers('<', '>');
-
-        //parsed confirmation data
-        if (m_strRawReceivedData != "") {
-          if(JsonParsing_RegisterConfirmation()){
-            Serial.println("registered");
-            clearBuffer();
-
-            m_caRtuState[RU_STATE_FIRST_LAYER] = RU_STATE_READY;
-          }
-          //post request again if confirmation not accepted
-          l_bIsSerialReceive = false;
-        }
-      }
-      break;
-
-    case RU_STATE_READY:
+      case RU_STATE_REGISTRATION:
         //display to LCD: registering device
-      Lcd_PrintGettingBinData();
+        Lcd_PrintRegisteringDevice();
 
-      // request
-      if (!l_bIsSerialReceive) {
-        // Get from API current data
-        if(httpGetRequest(API_GET_CURRENT_DATA)){
-          l_bIsSerialReceive = true;
+        // request
+        if (!l_zIsSerialReceive) {
+          //construct registering device in json format
+          String l_strConnectedDevice = "{\"collector\": " + COLLECTOR_IDENTIFIER + ", \"status\": [";
+          for (int i = 0; i < REMOTE_UNIT_AMOUNT; i++) {
+            l_strConnectedDevice += (i!=(REMOTE_UNIT_AMOUNT-1)) ? (String)m_zaIsRtuConnected[i]+"," : (String)m_zaIsRtuConnected[i];
+          }
+          l_strConnectedDevice += "]}";
+
+          // Post to API register
+          if(Client_HttpPostRequest(API_REGISTER_RU, l_strConnectedDevice)){
+            l_zIsSerialReceive = true;
+          }
         }
-      }
 
-      // receive
-      if (l_bIsSerialReceive) {
-          m_strRawReceivedData = recvWithStartEndMarkers('<', '>');
+        // receive
+        if (l_zIsSerialReceive) {
+          m_strRawReceivedData = Client_ReadSerialData('<', '>');
+
+          //parsed confirmation data
+          if (m_strRawReceivedData != "") {
+            if(Client_JsonParseRegisterConfirmation()){
+              Serial.println("registered");
+              clearBuffer();
+
+              m_iaRtuState[RU_STATE_FIRST_LAYER] = RU_STATE_READY;
+            }
+            //post request again if confirmation not accepted
+            l_zIsSerialReceive = false;
+          }
+        }
+        break;
+
+      case RU_STATE_READY:
+        //display to LCD: registering device
+        Lcd_PrintGettingBinData();
+
+        // request
+        if (!l_zIsSerialReceive) {
+          // Get from API current data
+          if(Client_HttpGetRequest(API_GET_CURRENT_DATA)){
+            l_zIsSerialReceive = true;
+          }
+        }
+
+        // receive
+        if (l_zIsSerialReceive) {
+          m_strRawReceivedData = Client_ReadSerialData('<', '>');
 
           //parsed bin data
           if (m_strRawReceivedData != "") {
 
-            JsonParsing_CurrentData();
+            Client_JsonParseCurrentData();
             clearBuffer();
-            m_caRtuState[RU_STATE_FIRST_LAYER] = RU_STATE_IDLE;
-            l_bIsSerialReceive = false;
+            m_iaRtuState[RU_STATE_FIRST_LAYER] = RU_STATE_IDLE;
+            l_zIsSerialReceive = false;
+
+            //set rtu connected state
+            setRtuState();
           }
         }
+        break;
 
-      break;
-
-    case RU_STATE_IDLE:
+      case RU_STATE_IDLE:
         //display to LCD: bin stock data
         Lcd_PrintCurrentBinData();
 
         // back to device registration if any connected/disconnected device
         // TODO check if RU1 PIN always says "RTU Was Disconnect : 0" if not connected
-//        if (checkRtuState() != 0) {
-//          m_caRtuState[RU_STATE_FIRST_LAYER] = RU_STATE_REGISTRATION;
-//          break;
-//        }
+        if (isRtuStateChanged() != 0) {
+          m_iaRtuState[RU_STATE_FIRST_LAYER] = RU_STATE_REGISTRATION;
+          break;
+        }
 
         // request every specific period
-        if (!l_bIsSerialReceive && m_ulCurrentMillis - m_ulLastGetActiveTransactionApi >= PERIOD_TIME_GET_ACTIVE_TRANSACTION) {
+        if (!l_zIsSerialReceive && m_ulCurrentMillis - m_lLastGetActiveTransactionApi >= PERIOD_TIME_GET_ACTIVE_TRANSACTION) {
           // Get from API current data
-          if(httpGetRequest(API_GET_TRANSACTION)){
-            l_bIsSerialReceive = true;
+          if(Client_HttpGetRequest(API_GET_TRANSACTION)){
+            l_zIsSerialReceive = true;
           }
-          m_ulLastGetActiveTransactionApi = m_ulCurrentMillis;
+          m_lLastGetActiveTransactionApi = m_ulCurrentMillis;
         }
 
         //receive
-        if (l_bIsSerialReceive) {
-          m_strRawReceivedData = recvWithStartEndMarkers('<', '>');
+        if (l_zIsSerialReceive) {
+          m_strRawReceivedData = Client_ReadSerialData('<', '>');
 
           //parsed transaction data
           if (m_strRawReceivedData != "") {
 
-            if(JsonParsing_TransactionData()) {
+            if(Client_JsonParseTransactionData()) {
               clearBuffer();
-              m_caRtuState[RU_STATE_FIRST_LAYER] = RU_STATE_TRANSACTION;
-              m_caRtuState[RU_STATE_SECOND_LAYER] = RU_STATE_TRANSACTION_ACTIVE;
+              m_iaRtuState[RU_STATE_FIRST_LAYER] = RU_STATE_TRANSACTION;
+              m_iaRtuState[RU_STATE_SECOND_LAYER] = RU_STATE_TRANSACTION_ACTIVE;
             }
-            l_bIsSerialReceive = false;
+            l_zIsSerialReceive = false;
           }
         }
-      break;
+        break;
 
-    // TODO this switch case is not tested
-    case RU_STATE_TRANSACTION:
+      // TODO this switch case is not tested
+      case RU_STATE_TRANSACTION:
+        switch (m_iaRtuState[RU_STATE_SECOND_LAYER]) {
+          case RU_STATE_TRANSACTION_ACTIVE:
+            //display to LCD: transaction status
+            Lcd_PrintTransactionState(false);
 
-      switch (m_caRtuState[RU_STATE_SECOND_LAYER]) {
-        case RU_STATE_TRANSACTION_ACTIVE:
-          //display to LCD: transaction status
-          Lcd_PrintTransactionState(false);
-
-          // request
-          if (!l_bIsSerialReceive){
-            // Get from API current data
-            if(httpGetRequest(API_TRANSACTION_CONFIRM)){
-              l_bIsSerialReceive = true;
-            }
-          }
-
-          //receive
-          if (l_bIsSerialReceive) {
-            m_strRawReceivedData = recvWithStartEndMarkers('<', '>');
-
-            //parsed transaction data
-            if (m_strRawReceivedData != "") {
-              JsonParsing_TransactionConfirmation();
-              clearBuffer();
-              m_caRtuState[RU_STATE_SECOND_LAYER] = RU_STATE_TRANSACTION_CONFIRMATION;
-              l_bIsSerialReceive = false;
-            }
-          }
-          break;
-        case RU_STATE_TRANSACTION_CONFIRMATION:
-          //display to LCD: transaction status
-          int l_iActiveTransaction = Lcd_PrintTransactionState(true);
-          checkPushButton();
-
-          for (int i = 0; i < REMOTE_UNIT_AMOUNT; i++) {
-            if (m_zaIsButtonPressed[i] == true) {
-              // request
-              if (!l_bIsSerialReceive){
-                if(httpGetRequest("/confirm-done?transaction_id=" + m_strTransactionId + "&device_id=" + m_straBinId[i])){
-                  l_bIsSerialReceive = true;
-                }
-              }
-
-              //receive
-              if (l_bIsSerialReceive) {
-                m_strRawReceivedData = recvWithStartEndMarkers('<', '>');
-                if (m_strRawReceivedData != "") {
-                  //Parse API
-                  JsonParsing_PickingsConfirmation(i);
-                  clearBuffer();
-                  m_zaIsButtonPressed[i] = false;
-                  m_zaBinStatus[i] = false;
-                }
+            // request
+            if (!l_zIsSerialReceive){
+              // Get from API current data
+              if(Client_HttpGetRequest(API_TRANSACTION_CONFIRM)){
+                l_zIsSerialReceive = true;
               }
             }
-          }
 
-          // transaction done
-          if (l_iActiveTransaction == 0) {
-            m_caRtuState[RU_STATE_FIRST_LAYER] = RU_STATE_IDLE;
-            m_caRtuState[RU_STATE_SECOND_LAYER] = RU_STATE_TRANSACTION_ACTIVE;
-          }
-          break;
-      }
-      break;
+            //receive
+            if (l_zIsSerialReceive) {
+              m_strRawReceivedData = Client_ReadSerialData('<', '>');
+
+              //parsed transaction data
+              if (m_strRawReceivedData != "") {
+                Client_JsonParseTransactionConfirmation();
+                clearBuffer();
+                m_iaRtuState[RU_STATE_SECOND_LAYER] = RU_STATE_TRANSACTION_CONFIRMATION;
+                l_zIsSerialReceive = false;
+              }
+            }
+            break;
+          case RU_STATE_TRANSACTION_CONFIRMATION:
+            //display to LCD: transaction status
+            int l_iActiveTransaction = Lcd_PrintTransactionState(true);
+            checkPushButton();
+
+            for (int i = 0; i < REMOTE_UNIT_AMOUNT; i++) {
+              if (m_zaIsButtonPressed[i] == true) {
+                // request
+                if (!l_zIsSerialReceive){
+                  if(Client_HttpGetRequest("/confirm-done?transaction_id=" + m_strTransactionId + "&device_id=" + m_straBinId[i])){
+                    l_zIsSerialReceive = true;
+                  }
+                }
+
+                //receive
+                if (l_zIsSerialReceive) {
+                  m_strRawReceivedData = Client_ReadSerialData('<', '>');
+                  if (m_strRawReceivedData != "") {
+                    //Parse API
+                    Client_JsonParsePickingsConfirmation(i);
+                    clearBuffer();
+                    m_zaIsButtonPressed[i] = false;
+                    m_zaBinStatus[i] = false;
+                  }
+                }
+              }
+            }
+
+            // transaction done
+            if (l_iActiveTransaction == 0) {
+              m_iaRtuState[RU_STATE_FIRST_LAYER] = RU_STATE_IDLE;
+              m_iaRtuState[RU_STATE_SECOND_LAYER] = RU_STATE_TRANSACTION_ACTIVE;
+            }
+            break;
+        }
+        break;
+    }
+  }
+  else{
+    Wifi_ConnectToNetwork();
   }
 
   delay(1);
@@ -328,6 +316,7 @@ void loop() {
 //Function print to specific LCD
 void Lcd_Print(LiquidCrystal p_oLcd, String p_strFirstRow, String p_strSecondRow) {
 
+  p_oLcd.begin(16,2);
   p_oLcd.clear();
   p_oLcd.setCursor(0, 0);
   p_oLcd.print(p_strFirstRow);
@@ -373,6 +362,7 @@ void Lcd_PrintGettingBinData() {
 void Lcd_PrintCurrentBinData(int p_iaBinId) {
   for (int i = 0; i < REMOTE_UNIT_AMOUNT; i++) {
     if(m_zaIsRtuConnected[i]){
+      m_oaRtu[i].begin(16,2);
       m_oaRtu[i].clear();
       m_oaRtu[i].setCursor(0,0);
       m_oaRtu[i].print("SKU:" + m_straSkuName[i]);
@@ -398,14 +388,15 @@ void Lcd_PrintCurrentBinData() {
   }
 }
 
-int Lcd_PrintTransactionState(bool p_bIsExecution){
+int Lcd_PrintTransactionState(bool p_bIsExecutionState){
 
   int l_iActiveTransaction = 0;
 
   for (int i = 0; i < REMOTE_UNIT_AMOUNT; i++) {
     if(m_zaIsRtuConnected[i]){
       if(m_zaBinStatus[i]){
-        if (p_bIsExecution) {
+        if (p_bIsExecutionState) {
+          m_oaRtu[i].begin(16,2);
           m_oaRtu[i].clear();
           m_oaRtu[i].setCursor(0, 0);
           m_oaRtu[i].print("Act:" + m_straActionCode[i]);
@@ -413,6 +404,7 @@ int Lcd_PrintTransactionState(bool p_bIsExecution){
           m_oaRtu[i].print("Qty:" + String(m_iaActionQty[i]));
           m_oaRtu[i].setCursor(10,1);
         } else {
+          m_oaRtu[i].begin(16,2);
           m_oaRtu[i].clear();
           m_oaRtu[i].setCursor(0, 0);
           m_oaRtu[i].print("Waiting for confirmation");
@@ -438,6 +430,9 @@ int Lcd_PrintTransactionState(bool p_bIsExecution){
 /** WIFI ESP Function **/
 //Connect to your wifi network
 void Wifi_ConnectToNetwork() {
+
+  Lcd_Print("Searching WiFi", "SSID:" + String(WIFI_SSID));
+
   // attempt to connect to WiFi network
   while (m_iStatus != WL_CONNECTED) {
     Serial.print("Attempting to connect to WPA SSID: ");
@@ -447,37 +442,30 @@ void Wifi_ConnectToNetwork() {
     m_iStatus = WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   }
 
+  Lcd_Print("WiFi Connected", "SSID:" + String(WIFI_SSID));
   Serial.println("You're connected to the network");
 }
 
 
 /** Client **/
-bool httpPostRequest (String p_strQuery, String p_strPayload) {
+bool Client_HttpPostRequest (String p_strQuery, String p_strPayload) {
 
-  bool l_zIsConnected = false;
-
-  while(!l_zIsConnected) {
-    //Close All Socket
-    m_oClient.stop();
-    l_zIsConnected = m_oClient.connect(HOST_ADDRESS, HOST_PORT);
-    Serial.println("Attempting to connect to raspi API: " + String(HOST_ADDRESS));
-  }
+  //Close All Socket
+  m_oClient.stop();
+  Serial.println("Attempting to connect to raspi API: " + String(HOST_ADDRESS));
 
   // if there's a successful connection
-  if (l_zIsConnected) {
+  if (m_oClient.connect(HOST_ADDRESS, HOST_PORT)) {
     Serial.println("Connected");
     Serial.println(p_strQuery);
 
     // send the HTTP GET request
     m_oClient.println(("POST " + p_strQuery + " HTTP/1.1"));
-    Serial.println(("POST " + p_strQuery + " HTTP/1.1"));
+    Serial.println(p_strQuery);
     m_oClient.println(("Host: " + String(HOST_ADDRESS)));
-    Serial.println(("Host: " + String(HOST_ADDRESS)));
     m_oClient.println("Accept: application/json");
     m_oClient.println(("Content-Type: application/json"));
-    Serial.println(("Content-Type: application/json"));
     m_oClient.println("Content-Length: " +String(p_strPayload.length() +1));
-    Serial.println("Content-Length: " +String(p_strPayload.length() + 1));
     m_oClient.println();
     m_oClient.println((p_strPayload));
     Serial.println((p_strPayload));
@@ -485,22 +473,16 @@ bool httpPostRequest (String p_strQuery, String p_strPayload) {
     return true;
   }
 
-  Lcd_Print("Failed", "Restart Collector");
-  Serial.println("Connection failed, please restart related collector");
   return false;
 }
 
-bool httpGetRequest (String p_strQuery) {
-  bool l_zIsConnected = false;
-  while(!l_zIsConnected) {
-    //Close All Socket
-    m_oClient.stop();
-    l_zIsConnected = m_oClient.connect(HOST_ADDRESS, HOST_PORT);
-    Serial.println("Attempting to connect to raspi API: " + String(HOST_ADDRESS));
-  }
+bool Client_HttpGetRequest (String p_strQuery) {
+
+  m_oClient.stop();
+  Serial.println("Attempting to connect to raspi API: " + String(HOST_ADDRESS));
 
   // if there's a successful connection
-  if (l_zIsConnected) {
+  if (m_oClient.connect(HOST_ADDRESS, HOST_PORT)) {
     Serial.println("Connected");
     // send the HTTP GET request
     m_oClient.println(("GET " + p_strQuery + " HTTP/1.1"));
@@ -512,58 +494,68 @@ bool httpGetRequest (String p_strQuery) {
     return true;
   }
 
-  Lcd_Print("Failed", "Restart Collector");
-  Serial.println("Connection failed, please restart related collector");
   return false;
 }
 
-String recvWithStartEndMarkers(char p_chStartMarker, char p_chEndMarker) {
+String Client_ReadSerialData(char p_chStartMarker, char p_chEndMarker) {
+
+  char l_caReceivedChars[RECEIVED_CHAR_LENGTH];
   static boolean l_zRecvInProgress = false;
   static int l_iNdx = 0;
-  char l_chRc;
+  char l_cReadChar;
 
   //wait for api return value
   while (!m_oClient.available());
 
   //there is something to be parsed
-  while (m_oClient.available() > 0 && m_bNewData == false) {
-    l_chRc = m_oClient.read();
+  while (m_oClient.available() > 0 && m_zNewData == false) {
+    l_cReadChar = m_oClient.read();
 
     if (l_zRecvInProgress == true) {
-      if (l_chRc != p_chEndMarker) {
-        m_caReceivedChars[l_iNdx] = l_chRc;
+      if (l_cReadChar != p_chEndMarker) {
+        l_caReceivedChars[l_iNdx] = l_cReadChar;
         l_iNdx++;
         if (l_iNdx >= RECEIVED_CHAR_LENGTH) {
           l_iNdx = RECEIVED_CHAR_LENGTH - 1;
         }
       }
       else {
-        m_caReceivedChars[l_iNdx] = '\0'; // terminate the string
+        l_caReceivedChars[l_iNdx] = '\0'; // terminate the string
         l_zRecvInProgress = false;
         l_iNdx = 0;
-        m_bNewData = true;
+        m_zNewData = true;
       }
     }
-    else if (l_chRc == p_chStartMarker) {
+    else if (l_cReadChar == p_chStartMarker) {
       l_zRecvInProgress = true;
     }
   }
 
-  if (m_bNewData == true) {
-    Serial.println(m_caReceivedChars);
-    m_bNewData = false;
+  if (m_zNewData == true) {
+    Serial.println(l_caReceivedChars);
+    m_zNewData = false;
   }
-  return m_caReceivedChars;
+
+  return l_caReceivedChars;
 }
 
-bool JsonParsing_RegisterConfirmation(){
+bool Client_JsonParseRegisterConfirmation(){
 
-  // TODO parse and check register confirmation data
-  return true;
+  StaticJsonDocument<RECEIVED_CHAR_LENGTH> l_oParsedData;
+  DeserializationError l_oError = deserializeJson(l_oParsedData, m_strRawReceivedData);
+
+  if (!l_oError) {
+    // TODO parse and check register confirmation data
+
+    return true;
+  }
+
+  Serial.println("Error Parsing Register Confirmation");
+  return false;
 }
 
 //Parsing CurrentData
-void JsonParsing_CurrentData() {
+void Client_JsonParseCurrentData() {
   StaticJsonDocument<RECEIVED_CHAR_LENGTH> l_oDoc;
   DeserializationError l_oError = deserializeJson(l_oDoc, m_strRawReceivedData);
 
@@ -588,13 +580,15 @@ void JsonParsing_CurrentData() {
     int l_iBinId = l_strDeviceId.substring(3).toInt();
     String l_strSkuName = (const char*)l_oSku["sku_name"];
     int l_iSkuQty = (int)l_oSku["quantity"];
+
+    // save to global variable
     m_straSkuName[l_iBinId] = l_strSkuName;
     m_iaSkuQty[l_iBinId] = l_iSkuQty;
   }
 }
 
 //Parsing transaction data
-bool JsonParsing_TransactionData() {
+bool Client_JsonParseTransactionData() {
   bool l_zStatus = false;
   StaticJsonDocument<RECEIVED_CHAR_LENGTH> l_oParsedData;
   DeserializationError l_oError = deserializeJson(l_oParsedData, m_strRawReceivedData);
@@ -622,7 +616,8 @@ bool JsonParsing_TransactionData() {
         //Decode bin ID
         int l_iBinId = l_strBinId.substring(3).toInt();
         // int ll_bin_id = l_oaJsonTransactionData["bin_id"];
-        //Move Global Array
+
+        // save to global variable
         m_zaBinStatus[l_iBinId] = true;
         m_straBinId[l_iBinId] = l_strBinId;
         m_straActionCode[l_iBinId] = l_strActionCode;
@@ -637,7 +632,7 @@ bool JsonParsing_TransactionData() {
 }
 
 //Parsing CurrentData
-void JsonParsing_TransactionConfirmation() {
+void Client_JsonParseTransactionConfirmation() {
   StaticJsonDocument<RECEIVED_CHAR_LENGTH> l_oParsedData;
   DeserializationError l_oError = deserializeJson(l_oParsedData, m_strRawReceivedData);
 
@@ -652,7 +647,7 @@ void JsonParsing_TransactionConfirmation() {
   }
 }
 
-void JsonParsing_PickingsConfirmation(int p_iBinIds) {
+void Client_JsonParsePickingsConfirmation(int p_iBinIds) {
   StaticJsonDocument<RECEIVED_CHAR_LENGTH> l_oParsedData;
   DeserializationError l_oError = deserializeJson(l_oParsedData, m_strRawReceivedData);
 
@@ -689,10 +684,6 @@ void clearBuffer() {
     Serial1.read();
   }
 
-  //clear global array
-  for(int i=0; i< RECEIVED_CHAR_LENGTH;i++){
-    m_caReceivedChars[i]=NULL;
-  }
   m_strRawReceivedData = "";
 }
 
@@ -723,7 +714,7 @@ void checkPushButton() {
 }
 
 //Complete Transaction Request Function
-int checkRtuState() {
+int isRtuStateChanged() {
 
   int l_iAnyDeviceChange = 0;
 
@@ -746,6 +737,23 @@ int checkRtuState() {
     }
   }
 
-  Serial.println("How many connected/disconnected devices: " + String(l_iAnyDeviceChange));
+//  Serial.println("How many devices that was just connected/disconnected: " + String(l_iAnyDeviceChange));
   return l_iAnyDeviceChange;
+}
+
+void setRtuState(){
+
+  for (int i = 0; i < REMOTE_UNIT_AMOUNT; i++) {
+    // Check the availability of RTU
+    if(digitalRead(PIN_DETECT_RU[i]) == LOW) {
+      // RTU connected
+      m_zaIsRtuConnected[i] = true;
+//      Serial.println("Connect: C" + COLLECTOR_IDENTIFIER + "B" + String(i+1));
+    }
+    else{
+      // RTU disconnected
+      m_zaIsRtuConnected[i] = false;
+//      Serial.println("Disonnect: C" + COLLECTOR_IDENTIFIER + "B" + String(i+1));
+    }
+  }
 }
