@@ -88,6 +88,10 @@ bool m_zaBinStatus[REMOTE_UNIT_AMOUNT]; // transaction status exist or not
 String m_straBinId[REMOTE_UNIT_AMOUNT];
 String m_straActionCode[REMOTE_UNIT_AMOUNT];
 int m_iaActionQty[REMOTE_UNIT_AMOUNT];
+//RU state-transaction-active
+String m_strTransactionExecution;
+//RU state-transaction-confirm
+bool m_zConfirmationStatus = false;
 
 /** Others */
 unsigned long m_ulCurrentMillis;
@@ -96,6 +100,7 @@ void setup() {
 
   //Setting input and output for the collector
   for (int i = 0; i < REMOTE_UNIT_AMOUNT; i++) {
+
     //Activate Pull UP for Push Button and RTU detector, default: high, pressed: low
     pinMode(PIN_BUTTON[i], INPUT_PULLUP);
     pinMode(PIN_DETECT_RU[i], INPUT_PULLUP);
@@ -103,21 +108,10 @@ void setup() {
     pinMode(PIN_LED[i], OUTPUT);
     //Initialize LCD as display output
     m_oaRtu[i].begin(16,2);
-
-    // Check the availability of RTU
-    if(digitalRead(PIN_DETECT_RU[i]) == LOW) {
-      // RTU connected
-      m_zaIsRtuConnected[i] = true;
-      // Display on LCD that RTU is waiting for running code
-      Lcd_Print(m_oaRtu[i], "Connecting Wifi", "C" + COLLECTOR_IDENTIFIER + "B" + String(i+1) + " Please Wait");
-    }
-    else{
-      // RTU disconnected
-      m_zaIsRtuConnected[i] = false;
-    }
   }
 
-  //Initate Serial Communication
+  //Initiate Serial Communication
+  Lcd_Print("Initiate WiFi", "Please Wait");
 
   //For ESP01
   Serial1.begin(115200);
@@ -133,8 +127,22 @@ void setup() {
   //Initiate ESP8266 Startup
   Wifi_ConnectToNetwork();
 
-  //Wait For Running Code
-  delay(500);
+  //check connected device
+  for (int i = 0; i < REMOTE_UNIT_AMOUNT; i++) {
+    // Check the availability of RTU
+    if(digitalRead(PIN_DETECT_RU[i]) == LOW) {
+      // RTU connected
+      m_zaIsRtuConnected[i] = true;
+      // Display on LCD that RTU is waiting for running code
+      Serial.println("Connect: C" + COLLECTOR_IDENTIFIER + "B" + String(i+1));
+      Lcd_Print(m_oaRtu[i], "Wifi Connected", "C" + COLLECTOR_IDENTIFIER + "B" + String(i+1) + " Please Wait");
+    }
+    else{
+      // RTU disconnected
+      m_zaIsRtuConnected[i] = false;
+      Serial.println("Disonnect: C" + COLLECTOR_IDENTIFIER + "B" + String(i+1));
+    }
+  }
 }
 
 void loop() {
@@ -150,7 +158,7 @@ void loop() {
       // request
       if (!l_bIsSerialReceive) {
         //construct registering device in json format
-        String l_strConnectedDevice = "{\"collector\": 1, \"status\": [";
+        String l_strConnectedDevice = "{\"collector\": " + COLLECTOR_IDENTIFIER + ", \"status\": [";
         for (int i = 0; i < REMOTE_UNIT_AMOUNT; i++) {
           l_strConnectedDevice += (i!=(REMOTE_UNIT_AMOUNT-1)) ? (String)m_zaIsRtuConnected[i]+"," : (String)m_zaIsRtuConnected[i];
         }
@@ -212,6 +220,13 @@ void loop() {
         //display to LCD: bin stock data
         Lcd_PrintCurrentBinData();
 
+        // back to device registration if any connected/disconnected device
+        // TODO check if RU1 PIN always says "RTU Was Disconnect : 0" if not connected
+//        if (checkRtuState() != 0) {
+//          m_caRtuState[RU_STATE_FIRST_LAYER] = RU_STATE_REGISTRATION;
+//          break;
+//        }
+
         // request every specific period
         if (!l_bIsSerialReceive && m_ulCurrentMillis - m_ulLastGetActiveTransactionApi >= PERIOD_TIME_GET_ACTIVE_TRANSACTION) {
           // Get from API current data
@@ -238,15 +253,68 @@ void loop() {
         }
       break;
 
+    // TODO this switch case is not tested
     case RU_STATE_TRANSACTION:
-      //display to LCD: transaction status
-      Lcd_PrintTransactionState();
 
       switch (m_caRtuState[RU_STATE_SECOND_LAYER]) {
         case RU_STATE_TRANSACTION_ACTIVE:
+          //display to LCD: transaction status
+          Lcd_PrintTransactionState(false);
 
+          // request
+          if (!l_bIsSerialReceive){
+            // Get from API current data
+            if(httpGetRequest(API_TRANSACTION_CONFIRM)){
+              l_bIsSerialReceive = true;
+            }
+          }
+
+          //receive
+          if (l_bIsSerialReceive) {
+            m_strRawReceivedData = recvWithStartEndMarkers('<', '>');
+
+            //parsed transaction data
+            if (m_strRawReceivedData != "") {
+              JsonParsing_TransactionConfirmation();
+              clearBuffer();
+              m_caRtuState[RU_STATE_SECOND_LAYER] = RU_STATE_TRANSACTION_CONFIRMATION;
+              l_bIsSerialReceive = false;
+            }
+          }
           break;
         case RU_STATE_TRANSACTION_CONFIRMATION:
+          //display to LCD: transaction status
+          int l_iActiveTransaction = Lcd_PrintTransactionState(true);
+          checkPushButton();
+
+          for (int i = 0; i < REMOTE_UNIT_AMOUNT; i++) {
+            if (m_zaIsButtonPressed[i] == true) {
+              // request
+              if (!l_bIsSerialReceive){
+                if(httpGetRequest("/confirm-done?transaction_id=" + m_strTransactionId + "&device_id=" + m_straBinId[i])){
+                  l_bIsSerialReceive = true;
+                }
+              }
+
+              //receive
+              if (l_bIsSerialReceive) {
+                m_strRawReceivedData = recvWithStartEndMarkers('<', '>');
+                if (m_strRawReceivedData != "") {
+                  //Parse API
+                  JsonParsing_PickingsConfirmation(i);
+                  clearBuffer();
+                  m_zaIsButtonPressed[i] = false;
+                  m_zaBinStatus[i] = false;
+                }
+              }
+            }
+          }
+
+          // transaction done
+          if (l_iActiveTransaction == 0) {
+            m_caRtuState[RU_STATE_FIRST_LAYER] = RU_STATE_IDLE;
+            m_caRtuState[RU_STATE_SECOND_LAYER] = RU_STATE_TRANSACTION_ACTIVE;
+          }
           break;
       }
       break;
@@ -330,26 +398,41 @@ void Lcd_PrintCurrentBinData() {
   }
 }
 
-void Lcd_PrintTransactionState(){
+int Lcd_PrintTransactionState(bool p_bIsExecution){
+
+  int l_iActiveTransaction = 0;
+
   for (int i = 0; i < REMOTE_UNIT_AMOUNT; i++) {
     if(m_zaIsRtuConnected[i]){
       if(m_zaBinStatus[i]){
-        m_oaRtu[i].clear();
-        m_oaRtu[i].setCursor(0, 0);
-        m_oaRtu[i].print("Act:" + m_straActionCode[i]);
-        m_oaRtu[i].setCursor(0, 1);
-        m_oaRtu[i].print("Qty:" + String(m_iaActionQty[i]));
-        m_oaRtu[i].setCursor(10,1);
+        if (p_bIsExecution) {
+          m_oaRtu[i].clear();
+          m_oaRtu[i].setCursor(0, 0);
+          m_oaRtu[i].print("Act:" + m_straActionCode[i]);
+          m_oaRtu[i].setCursor(0, 1);
+          m_oaRtu[i].print("Qty:" + String(m_iaActionQty[i]));
+          m_oaRtu[i].setCursor(10,1);
+        } else {
+          m_oaRtu[i].clear();
+          m_oaRtu[i].setCursor(0, 0);
+          m_oaRtu[i].print("Waiting for confirmation");
+        }
         m_oaRtu[i].print("C" + COLLECTOR_IDENTIFIER + "B" + String(i+1));
+        digitalWrite(PIN_LED[i], HIGH); //LED ON
+
+        l_iActiveTransaction++;
       }
       else{
         Lcd_PrintCurrentBinData(i);
+        digitalWrite(PIN_LED[i], LOW); //LED OFF
       }
     }
     else{
       Lcd_PrintDeviceNotRegistered(i);
     }
   }
+
+  return l_iActiveTransaction;
 }
 
 /** WIFI ESP Function **/
@@ -553,6 +636,45 @@ bool JsonParsing_TransactionData() {
   Serial.println("Error Parsing Json Transaction Data");
 }
 
+//Parsing CurrentData
+void JsonParsing_TransactionConfirmation() {
+  StaticJsonDocument<RECEIVED_CHAR_LENGTH> l_oParsedData;
+  DeserializationError l_oError = deserializeJson(l_oParsedData, m_strRawReceivedData);
+
+  if (l_oError) {
+    Serial.println("Error Parsing Transaction Confirmation");
+  }
+  //Parsing the Data And Move to Global Var
+  else {
+    //Transaction_Status
+    JsonObject l_oJsonTransactionData = l_oParsedData["data"];
+    m_strTransactionExecution = (const char*)l_oJsonTransactionData["status"];
+  }
+}
+
+void JsonParsing_PickingsConfirmation(int p_iBinIds) {
+  StaticJsonDocument<RECEIVED_CHAR_LENGTH> l_oParsedData;
+  DeserializationError l_oError = deserializeJson(l_oParsedData, m_strRawReceivedData);
+
+  if (l_oError) {
+    Serial.println("Error Parsing Pickings Confirmation");
+    m_zConfirmationStatus = false;
+  }
+  else { //Parsing the Data And Move to Global Var
+    //Transaction_Status
+    bool transStatus = l_oParsedData["success"];
+    m_zConfirmationStatus = transStatus;
+    if (transStatus == true) {
+      JsonObject l_oJsonTransactionData = l_oParsedData["data"];
+      m_zaBinStatus[p_iBinIds] = false;
+      //        m_straSkuName[p_iBinIds]=(const char*)l_oaJsonTransactionData["sku_name"];
+      m_iaSkuQty[p_iBinIds] = (int)l_oJsonTransactionData["quantity"];
+      Serial.println(m_zaBinStatus[p_iBinIds]);
+      //        Serial.println(m_straSkuName[p_iBinIds]);
+    }
+  }
+}
+
 
 /** Other Function **/
 //Clear Buffer
@@ -572,4 +694,58 @@ void clearBuffer() {
     m_caReceivedChars[i]=NULL;
   }
   m_strRawReceivedData = "";
+}
+
+//Read Push Button
+bool buttonWasPressed(int p_iPinButton) {
+  bool l_zStatusButton = false;
+
+  if (digitalRead(p_iPinButton) == LOW) {
+    l_zStatusButton = true;
+  } else {
+    l_zStatusButton = false;
+  }
+
+  return l_zStatusButton;
+}
+
+//Complete Transaction Request Function
+void checkPushButton() {
+  //Serial.println("Button Pressed");
+  for (int i = 0; i < REMOTE_UNIT_AMOUNT; i++) {
+  //Check Button are Pressed or Not
+    if (buttonWasPressed(PIN_BUTTON[i]) && (m_zaBinStatus[i] == true)) {
+      m_zaIsButtonPressed[i] = true;
+      Serial.println("Button Was Pressed : " + String(i));
+      Serial.println(m_zaIsButtonPressed[i]);
+    }
+  }
+}
+
+//Complete Transaction Request Function
+int checkRtuState() {
+
+  int l_iAnyDeviceChange = 0;
+
+  for (int i = 0; i < REMOTE_UNIT_AMOUNT; i++) {
+
+  // RTU just connected and last state is not connected
+    if (digitalRead(PIN_DETECT_RU[i]) == LOW && m_zaIsRtuConnected[i] == false){
+      m_zaIsRtuConnected[i] = true;
+      Serial.println("RTU Was Connect : " + String(i));
+      Serial.println(m_zaIsRtuConnected[i]);
+      l_iAnyDeviceChange++;
+    }
+
+    // RTU just disconnected and last state is connected
+    if (digitalRead(PIN_DETECT_RU[i]) == HIGH && m_zaIsRtuConnected[i] == true) {
+      m_zaIsRtuConnected[i] = false;
+      Serial.println("RTU Was Disconnect : " + String(i));
+      Serial.println(m_zaIsRtuConnected[i]);
+      l_iAnyDeviceChange++;
+    }
+  }
+
+  Serial.println("How many connected/disconnected devices: " + String(l_iAnyDeviceChange));
+  return l_iAnyDeviceChange;
 }
