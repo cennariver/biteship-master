@@ -332,6 +332,11 @@ void Lcd_Print(String p_strFirstRow, String p_strSecondRow){
   }
 }
 
+// TODO where should I put this ?
+void Lcd_PrintCantConnectMasterApi(){
+  Lcd_Print("Attempting to", "connect to Raspi");
+}
+
 void Lcd_PrintDeviceNotRegistered(int p_iBinId){
 
   Lcd_Print(m_oaRtu[p_iBinId], "RU: C" + COLLECTOR_IDENTIFIER + "B" + String(p_iBinId+1), "Status:Unregistered");
@@ -465,7 +470,7 @@ bool Client_HttpPostRequest (String p_strQuery, String p_strPayload) {
     m_oClient.println(("Host: " + String(HOST_ADDRESS)));
     m_oClient.println("Accept: application/json");
     m_oClient.println(("Content-Type: application/json"));
-    m_oClient.println("Content-Length: " +String(p_strPayload.length() +1));
+    m_oClient.println("Content-Length: " +String(p_strPayload.length()+1));
     m_oClient.println();
     m_oClient.println((p_strPayload));
     Serial.println((p_strPayload));
