@@ -62,19 +62,13 @@ bool m_zNewData = false;
 //const char     HOST_ADDRESS[]  = "192.168.0.6";
 const char     HOST_ADDRESS[]  = "192.168.1.7";
 const int      HOST_PORT       = 3000;
-//state
-const uint8_t  RU_STATE_FIRST_LAYER          = 0;
-const uint8_t  RU_STATE_SECOND_LAYER         = RU_STATE_FIRST_LAYER + 1;
-const uint8_t  RU_STATE_LAYER_THICKNESS      = RU_STATE_SECOND_LAYER + 1;
-uint8_t m_iaRtuState[RU_STATE_LAYER_THICKNESS];
-//state first layer
-const uint8_t  RU_STATE_REGISTRATION         = 0;
-const uint8_t  RU_STATE_READY                = RU_STATE_REGISTRATION + 1;
-const uint8_t  RU_STATE_IDLE                 = RU_STATE_READY + 1;
-const uint8_t  RU_STATE_TRANSACTION          = RU_STATE_IDLE + 1;
-//state second layer
-const uint8_t  RU_STATE_TRANSACTION_ACTIVE         = 0;
-const uint8_t  RU_STATE_TRANSACTION_CONFIRMATION   = RU_STATE_TRANSACTION_ACTIVE + 1;
+//rtu state
+uint8_t m_iaRtuState;
+const uint8_t  RU_STATE_REGISTRATION               = 0;
+const uint8_t  RU_STATE_READY                     = RU_STATE_REGISTRATION + 1;
+const uint8_t  RU_STATE_IDLE                      = RU_STATE_READY + 1;
+const uint8_t  RU_STATE_TRANSACTION_CONFIRMATION  = RU_STATE_IDLE + 1;
+const uint8_t  RU_STATE_TRANSACTION_PICKING       = RU_STATE_TRANSACTION_CONFIRMATION + 1;
 //RU state-ready variable
 String m_straSkuName[REMOTE_UNIT_AMOUNT];
 int m_iaSkuQty[REMOTE_UNIT_AMOUNT];
@@ -132,7 +126,7 @@ void loop() {
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("WiFi Status: " + (WiFi.status() == WL_CONNECTED) ? "WL_CONNECTED":String(WiFi.status()));
 
-    switch (m_iaRtuState[RU_STATE_FIRST_LAYER]) {
+    switch (m_iaRtuState) {
 
       case RU_STATE_REGISTRATION:
         //display to LCD: registering device
@@ -163,7 +157,7 @@ void loop() {
               Serial.println("registered");
               clearBuffer();
 
-              m_iaRtuState[RU_STATE_FIRST_LAYER] = RU_STATE_READY;
+              m_iaRtuState = RU_STATE_READY;
             }
             //post request again if confirmation not accepted
             l_zIsSerialReceive = false;
@@ -192,7 +186,7 @@ void loop() {
 
             Client_JsonParseCurrentData();
             clearBuffer();
-            m_iaRtuState[RU_STATE_FIRST_LAYER] = RU_STATE_IDLE;
+            m_iaRtuState = RU_STATE_IDLE;
             l_zIsSerialReceive = false;
 
             //set rtu connected state
@@ -206,9 +200,8 @@ void loop() {
         Lcd_PrintCurrentBinData();
 
         // back to device registration if any connected/disconnected device
-        // TODO check if RU1 PIN always says "RTU Was Disconnect : 0" if not connected
         if (isRtuStateChanged() != 0) {
-          m_iaRtuState[RU_STATE_FIRST_LAYER] = RU_STATE_REGISTRATION;
+          m_iaRtuState = RU_STATE_REGISTRATION;
           break;
         }
 
@@ -230,8 +223,7 @@ void loop() {
 
             if(Client_JsonParseTransactionData()) {
               clearBuffer();
-              m_iaRtuState[RU_STATE_FIRST_LAYER] = RU_STATE_TRANSACTION;
-              m_iaRtuState[RU_STATE_SECOND_LAYER] = RU_STATE_TRANSACTION_ACTIVE;
+              m_iaRtuState = RU_STATE_TRANSACTION_CONFIRMATION;
             }
             l_zIsSerialReceive = false;
           }
@@ -239,16 +231,41 @@ void loop() {
         break;
 
       // TODO this switch case is not tested
-      case RU_STATE_TRANSACTION:
-        switch (m_iaRtuState[RU_STATE_SECOND_LAYER]) {
-          case RU_STATE_TRANSACTION_ACTIVE:
-            //display to LCD: transaction status
-            Lcd_PrintTransactionState(false);
+      case RU_STATE_TRANSACTION_CONFIRMATION:
+        //display to LCD: transaction status
+        Lcd_PrintTransactionState(false);
 
+        // request
+        if (!l_zIsSerialReceive){
+          // Get from API current data
+          if(Client_HttpGetRequest(API_TRANSACTION_CONFIRM)){
+            l_zIsSerialReceive = true;
+          }
+        }
+
+        //receive
+        if (l_zIsSerialReceive) {
+          m_strRawReceivedData = Client_ReadSerialData('<', '>');
+
+          //parsed transaction data
+          if (m_strRawReceivedData != "") {
+            Client_JsonParseTransactionConfirmation();
+            clearBuffer();
+            m_iaRtuState = RU_STATE_TRANSACTION_PICKING;
+            l_zIsSerialReceive = false;
+          }
+        }
+        break;
+      case RU_STATE_TRANSACTION_PICKING:
+        //display to LCD: transaction status
+        int l_iActiveTransaction = Lcd_PrintTransactionState(true);
+        checkPushButton();
+
+        for (int i = 0; i < REMOTE_UNIT_AMOUNT; i++) {
+          if (m_zaIsButtonPressed[i] == true) {
             // request
             if (!l_zIsSerialReceive){
-              // Get from API current data
-              if(Client_HttpGetRequest(API_TRANSACTION_CONFIRM)){
+              if(Client_HttpGetRequest("/confirm-done?transaction_id=" + m_strTransactionId + "&device_id=" + m_straBinId[i])){
                 l_zIsSerialReceive = true;
               }
             }
@@ -256,50 +273,20 @@ void loop() {
             //receive
             if (l_zIsSerialReceive) {
               m_strRawReceivedData = Client_ReadSerialData('<', '>');
-
-              //parsed transaction data
               if (m_strRawReceivedData != "") {
-                Client_JsonParseTransactionConfirmation();
+                //Parse API
+                Client_JsonParsePickingsConfirmation(i);
                 clearBuffer();
-                m_iaRtuState[RU_STATE_SECOND_LAYER] = RU_STATE_TRANSACTION_CONFIRMATION;
-                l_zIsSerialReceive = false;
+                m_zaIsButtonPressed[i] = false;
+                m_zaBinStatus[i] = false;
               }
             }
-            break;
-          case RU_STATE_TRANSACTION_CONFIRMATION:
-            //display to LCD: transaction status
-            int l_iActiveTransaction = Lcd_PrintTransactionState(true);
-            checkPushButton();
+          }
+        }
 
-            for (int i = 0; i < REMOTE_UNIT_AMOUNT; i++) {
-              if (m_zaIsButtonPressed[i] == true) {
-                // request
-                if (!l_zIsSerialReceive){
-                  if(Client_HttpGetRequest("/confirm-done?transaction_id=" + m_strTransactionId + "&device_id=" + m_straBinId[i])){
-                    l_zIsSerialReceive = true;
-                  }
-                }
-
-                //receive
-                if (l_zIsSerialReceive) {
-                  m_strRawReceivedData = Client_ReadSerialData('<', '>');
-                  if (m_strRawReceivedData != "") {
-                    //Parse API
-                    Client_JsonParsePickingsConfirmation(i);
-                    clearBuffer();
-                    m_zaIsButtonPressed[i] = false;
-                    m_zaBinStatus[i] = false;
-                  }
-                }
-              }
-            }
-
-            // transaction done
-            if (l_iActiveTransaction == 0) {
-              m_iaRtuState[RU_STATE_FIRST_LAYER] = RU_STATE_IDLE;
-              m_iaRtuState[RU_STATE_SECOND_LAYER] = RU_STATE_TRANSACTION_ACTIVE;
-            }
-            break;
+        // transaction done
+        if (l_iActiveTransaction == 0) {
+          m_iaRtuState = RU_STATE_IDLE;
         }
         break;
     }
