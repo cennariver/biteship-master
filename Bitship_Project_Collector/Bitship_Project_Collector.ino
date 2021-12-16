@@ -48,19 +48,21 @@ WiFiEspClient m_oClient;
 
 
 /** Client */
-const String   COLLECTOR_IDENTIFIER      = "1";
-const String   API_REGISTER_RU           = "/ru-registration-collector/" + COLLECTOR_IDENTIFIER;
-const String   API_GET_CURRENT_DATA      = "/get-current-data-by-collector/" + COLLECTOR_IDENTIFIER;
-const String   API_GET_TRANSACTION       = "/get-transaction-by-collector/"+ COLLECTOR_IDENTIFIER;
-const String   API_TRANSACTION_CONFIRM   = "/confirm-on-process-by-collector/" + COLLECTOR_IDENTIFIER;
-const String   API_PICKING_CONFIRM       = "/confirm-done?bin_id=";
+const String   COLLECTOR_IDENTIFIER            = "1";
+const String   API_REGISTER_RU                 = "/ru-registration-collector/" + COLLECTOR_IDENTIFIER;
+const String   API_GET_CURRENT_DATA            = "/get-current-data-by-collector/" + COLLECTOR_IDENTIFIER;
+const String   API_GET_TRANSACTION             = "/get-transaction-by-collector/"+ COLLECTOR_IDENTIFIER;
+const String   API_TRANSACTION_CONFIRM         = "/confirm-on-process-by-collector/" + COLLECTOR_IDENTIFIER;
+const String   API_PICKING_CONFIRM             = "/confirm-done?bin_id=";
+const String   API_TRANSACTION_PICKING_1stPart = "/confirm-done?transaction_id=";
+const String   API_TRANSACTION_PICKING_2ndPart = "&device_id=";
 //receive global variable
 const int RECEIVED_CHAR_LENGTH         = 1500;
-String m_strRawReceivedData;
-bool l_zIsSerialReceive = false;
+char m_caReceivedChars[RECEIVED_CHAR_LENGTH];
+String m_strRcvSendBuffer;
 bool m_zNewData = false;
 //const char     HOST_ADDRESS[]  = "192.168.0.6";
-const char     HOST_ADDRESS[]  = "192.168.1.7";
+const char     HOST_ADDRESS[]  = "192.168.1.6";
 const int      HOST_PORT       = 3000;
 //rtu state
 uint8_t m_iaRtuState;
@@ -103,10 +105,6 @@ void setup() {
   }
 
   //Initiate Serial Communication
-  //For ESP01
-  Serial1.begin(115200);
-  Serial1.setTimeout(5000);
-  WiFi.init(&Serial1);
   //For Arduino Serial
   Serial.begin(115200);
   //Clear Buffer
@@ -124,43 +122,35 @@ void loop() {
   m_ulCurrentMillis = millis();
 
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("WiFi Status: " + (WiFi.status() == WL_CONNECTED) ? "WL_CONNECTED":String(WiFi.status()));
-
+    Serial.println("WiFi:" + ((WiFi.status() == WL_CONNECTED) ? "WL_CONNECTED":String(WiFi.status())) + " | RTU:" + String(m_iaRtuState));
     switch (m_iaRtuState) {
 
       case RU_STATE_REGISTRATION:
         //display to LCD: registering device
         Lcd_PrintRegisteringDevice();
 
-        // request
-        if (!l_zIsSerialReceive) {
-          //construct registering device in json format
-          String l_strConnectedDevice = "{\"collector\": " + COLLECTOR_IDENTIFIER + ", \"status\": [";
-          for (int i = 0; i < REMOTE_UNIT_AMOUNT; i++) {
-            l_strConnectedDevice += (i!=(REMOTE_UNIT_AMOUNT-1)) ? (String)m_zaIsRtuConnected[i]+"," : (String)m_zaIsRtuConnected[i];
-          }
-          l_strConnectedDevice += "]}";
-
-          // Post to API register
-          if(Client_HttpPostRequest(API_REGISTER_RU, l_strConnectedDevice)){
-            l_zIsSerialReceive = true;
-          }
+        //construct registering device in json format
+        m_strRcvSendBuffer = "{\"collector\": " + COLLECTOR_IDENTIFIER + ", \"status\": [";
+        for (int i = 0; i < REMOTE_UNIT_AMOUNT; i++) {
+          m_strRcvSendBuffer += (i!=(REMOTE_UNIT_AMOUNT-1)) ? (String)m_zaIsRtuConnected[i]+"," : (String)m_zaIsRtuConnected[i];
         }
+        m_strRcvSendBuffer += "]}";
 
-        // receive
-        if (l_zIsSerialReceive) {
-          m_strRawReceivedData = Client_ReadSerialData('<', '>');
-
-          //parsed confirmation data
-          if (m_strRawReceivedData != "") {
+        //post request to API register
+        if(Client_HttpPostRequest(API_REGISTER_RU, m_strRcvSendBuffer)){
+          //receive serial data
+          Serial.println("post request success API_REGISTER_RU");
+          m_strRcvSendBuffer = Client_ReadSerialData('<', '>');
+          if (m_strRcvSendBuffer != "") {
+            //parsed confirmation data
+            Serial.println("some data available");
             if(Client_JsonParseRegisterConfirmation()){
+              //continue to next state
               Serial.println("registered");
               clearBuffer();
 
               m_iaRtuState = RU_STATE_READY;
             }
-            //post request again if confirmation not accepted
-            l_zIsSerialReceive = false;
           }
         }
         break;
@@ -169,25 +159,17 @@ void loop() {
         //display to LCD: registering device
         Lcd_PrintGettingBinData();
 
-        // request
-        if (!l_zIsSerialReceive) {
-          // Get from API current data
-          if(Client_HttpGetRequest(API_GET_CURRENT_DATA)){
-            l_zIsSerialReceive = true;
-          }
-        }
-
-        // receive
-        if (l_zIsSerialReceive) {
-          m_strRawReceivedData = Client_ReadSerialData('<', '>');
-
-          //parsed bin data
-          if (m_strRawReceivedData != "") {
-
+        //get request from API current data
+        if(Client_HttpGetRequest(API_GET_CURRENT_DATA)){
+          //receive serial data
+          Serial.println("get request success API_GET_CURRENT_DATA");
+          m_strRcvSendBuffer = Client_ReadSerialData('<', '>');
+          if (m_strRcvSendBuffer != "") {
+            Serial.println("some data available");
+            //parsed bin data and continue to next state
             Client_JsonParseCurrentData();
             clearBuffer();
             m_iaRtuState = RU_STATE_IDLE;
-            l_zIsSerialReceive = false;
 
             //set rtu connected state
             setRtuState();
@@ -199,34 +181,32 @@ void loop() {
         //display to LCD: bin stock data
         Lcd_PrintCurrentBinData();
 
-        // back to device registration if any connected/disconnected device
+        //back to device registration if any device was connected/disconnected
         if (isRtuStateChanged() != 0) {
           m_iaRtuState = RU_STATE_REGISTRATION;
           break;
         }
 
-        // request every specific period
-        if (!l_zIsSerialReceive && m_ulCurrentMillis - m_lLastGetActiveTransactionApi >= PERIOD_TIME_GET_ACTIVE_TRANSACTION) {
-          // Get from API current data
+        //request every specific period
+        if (m_ulCurrentMillis - m_lLastGetActiveTransactionApi >= PERIOD_TIME_GET_ACTIVE_TRANSACTION) {
+          //get request from API transaction data
           if(Client_HttpGetRequest(API_GET_TRANSACTION)){
-            l_zIsSerialReceive = true;
+            //receive serial data
+            // TODO sometimes it stuck in here
+            Serial.println("get request success API_GET_TRANSACTION");
+            m_strRcvSendBuffer = Client_ReadSerialData('<', '>');
+            if (m_strRcvSendBuffer != "") {
+              //parsed transaction data
+              Serial.println("some data available");
+              if(Client_JsonParseTransactionData()) {
+                //continue to transaction state
+                Serial.println("transaction active");
+                clearBuffer();
+                m_iaRtuState = RU_STATE_TRANSACTION_CONFIRMATION;
+              }
+            }
           }
           m_lLastGetActiveTransactionApi = m_ulCurrentMillis;
-        }
-
-        //receive
-        if (l_zIsSerialReceive) {
-          m_strRawReceivedData = Client_ReadSerialData('<', '>');
-
-          //parsed transaction data
-          if (m_strRawReceivedData != "") {
-
-            if(Client_JsonParseTransactionData()) {
-              clearBuffer();
-              m_iaRtuState = RU_STATE_TRANSACTION_CONFIRMATION;
-            }
-            l_zIsSerialReceive = false;
-          }
         }
         break;
 
@@ -235,57 +215,64 @@ void loop() {
         //display to LCD: transaction status
         Lcd_PrintTransactionState(false);
 
-        // request
-        if (!l_zIsSerialReceive){
-          // Get from API current data
-          if(Client_HttpGetRequest(API_TRANSACTION_CONFIRM)){
-            l_zIsSerialReceive = true;
-          }
-        }
-
-        //receive
-        if (l_zIsSerialReceive) {
-          m_strRawReceivedData = Client_ReadSerialData('<', '>');
-
-          //parsed transaction data
-          if (m_strRawReceivedData != "") {
+        //get request from API transaction confirmation data
+        if(Client_HttpGetRequest(API_TRANSACTION_CONFIRM)){
+          //receive serial data
+          Serial.println("get request success API_TRANSACTION_CONFIRM");
+          m_strRcvSendBuffer = Client_ReadSerialData('<', '>');
+          if (m_strRcvSendBuffer != "") {
+            //parsed transaction confirmation data and continue to next state
+            Serial.println("some data available");
             Client_JsonParseTransactionConfirmation();
             clearBuffer();
             m_iaRtuState = RU_STATE_TRANSACTION_PICKING;
-            l_zIsSerialReceive = false;
           }
         }
         break;
+
+      // TODO this switch case is not tested
       case RU_STATE_TRANSACTION_PICKING:
-        //display to LCD: transaction status
-        int l_iActiveTransaction = Lcd_PrintTransactionState(true);
+        //display to LCD: transaction status and get rtu that need to be done
+        uint8_t l_iActiveTransaction = Lcd_PrintTransactionState(true);
         checkPushButton();
 
+        //get request from API current data
         for (int i = 0; i < REMOTE_UNIT_AMOUNT; i++) {
           if (m_zaIsButtonPressed[i] == true) {
-            // request
-            if (!l_zIsSerialReceive){
-              if(Client_HttpGetRequest("/confirm-done?transaction_id=" + m_strTransactionId + "&device_id=" + m_straBinId[i])){
-                l_zIsSerialReceive = true;
-              }
-            }
 
-            //receive
-            if (l_zIsSerialReceive) {
-              m_strRawReceivedData = Client_ReadSerialData('<', '>');
-              if (m_strRawReceivedData != "") {
-                //Parse API
-                Client_JsonParsePickingsConfirmation(i);
+            //get request from API transaction picking data
+//            if(Client_HttpGetRequest("/confirm-done?transaction_id=" + m_strTransactionId + "&device_id=" + m_straBinId[i])){
+            if(Client_HttpGetRequest(API_TRANSACTION_PICKING_1stPart + m_strTransactionId + API_TRANSACTION_PICKING_2ndPart + m_straBinId[i])){
+              //receive serial data
+              Serial.println("get request success API_TRANSACTION_PICKING");
+              m_strRcvSendBuffer = Client_ReadSerialData('<', '>');
+              if (m_strRcvSendBuffer != "") {
+                //parsed transaction picking data and continue to next state
+                if (Client_JsonParsePickingsConfirmation(i)) {
+                  // transaction picking for specific bin is done
+                  m_zaIsButtonPressed[i] = false;
+                  m_zaBinStatus[i] = false;
+                }
                 clearBuffer();
-                m_zaIsButtonPressed[i] = false;
-                m_zaBinStatus[i] = false;
               }
             }
           }
         }
 
-        // transaction done
+        //transaction done
         if (l_iActiveTransaction == 0) {
+
+          //reset all values
+          for(int i=0; i<REMOTE_UNIT_AMOUNT; i++){
+            m_zaBinStatus[i] = false;
+            m_straBinId[i] = "";
+            m_straActionCode[i] = "";
+            m_iaActionQty[i] = 0;
+          }
+          m_strTransactionExecution ="";
+          m_zConfirmationStatus = false;
+
+          //back to IDLE state
           m_iaRtuState = RU_STATE_IDLE;
         }
         break;
@@ -319,9 +306,10 @@ void Lcd_Print(String p_strFirstRow, String p_strSecondRow){
   }
 }
 
-// TODO where should I put this ?
-void Lcd_PrintCantConnectMasterApi(){
-  Lcd_Print("Attempting to", "connect to Raspi");
+void Lcd_PrintCantConnectToRaspi(){
+  Lcd_Print("Connection fail", "Try again in 1s");
+  //give delay to try again
+  delay(1000);
 }
 
 void Lcd_PrintDeviceNotRegistered(int p_iBinId){
@@ -424,6 +412,10 @@ int Lcd_PrintTransactionState(bool p_bIsExecutionState){
 void Wifi_ConnectToNetwork() {
 
   Lcd_Print("Searching WiFi", "SSID:" + String(WIFI_SSID));
+  //For ESP01
+  Serial1.begin(115200);
+  Serial1.setTimeout(5000);
+  WiFi.init(&Serial1);
 
   // attempt to connect to WiFi network
   while (m_iStatus != WL_CONNECTED) {
@@ -453,8 +445,8 @@ bool Client_HttpPostRequest (String p_strQuery, String p_strPayload) {
 
     // send the HTTP GET request
     m_oClient.println(("POST " + p_strQuery + " HTTP/1.1"));
-    Serial.println(p_strQuery);
     m_oClient.println(("Host: " + String(HOST_ADDRESS)));
+    m_oClient.println("Connection: keep-alive");
     m_oClient.println("Accept: application/json");
     m_oClient.println(("Content-Type: application/json"));
     m_oClient.println("Content-Length: " +String(p_strPayload.length()+1));
@@ -462,9 +454,12 @@ bool Client_HttpPostRequest (String p_strQuery, String p_strPayload) {
     m_oClient.println((p_strPayload));
     Serial.println((p_strPayload));
 
-    return true;
+    if(m_oClient.status() == ESTABLISHED){
+      return true;
+    }
   }
 
+  Lcd_PrintCantConnectToRaspi();
   return false;
 }
 
@@ -483,15 +478,17 @@ bool Client_HttpGetRequest (String p_strQuery) {
     m_oClient.println("Connection: close");
     m_oClient.println();
 
-    return true;
+    if(m_oClient.status() == ESTABLISHED){
+      return true;
+    }
   }
 
+  Lcd_PrintCantConnectToRaspi();
   return false;
 }
 
 String Client_ReadSerialData(char p_chStartMarker, char p_chEndMarker) {
 
-  char l_caReceivedChars[RECEIVED_CHAR_LENGTH];
   static boolean l_zRecvInProgress = false;
   static int l_iNdx = 0;
   char l_cReadChar;
@@ -505,14 +502,14 @@ String Client_ReadSerialData(char p_chStartMarker, char p_chEndMarker) {
 
     if (l_zRecvInProgress == true) {
       if (l_cReadChar != p_chEndMarker) {
-        l_caReceivedChars[l_iNdx] = l_cReadChar;
+        m_caReceivedChars[l_iNdx] = l_cReadChar;
         l_iNdx++;
         if (l_iNdx >= RECEIVED_CHAR_LENGTH) {
           l_iNdx = RECEIVED_CHAR_LENGTH - 1;
         }
       }
       else {
-        l_caReceivedChars[l_iNdx] = '\0'; // terminate the string
+        m_caReceivedChars[l_iNdx] = '\0'; // terminate the string
         l_zRecvInProgress = false;
         l_iNdx = 0;
         m_zNewData = true;
@@ -524,17 +521,17 @@ String Client_ReadSerialData(char p_chStartMarker, char p_chEndMarker) {
   }
 
   if (m_zNewData == true) {
-    Serial.println(l_caReceivedChars);
+    Serial.println(m_caReceivedChars);
     m_zNewData = false;
   }
 
-  return l_caReceivedChars;
+  return m_caReceivedChars;
 }
 
 bool Client_JsonParseRegisterConfirmation(){
 
   StaticJsonDocument<RECEIVED_CHAR_LENGTH> l_oParsedData;
-  DeserializationError l_oError = deserializeJson(l_oParsedData, m_strRawReceivedData);
+  DeserializationError l_oError = deserializeJson(l_oParsedData, m_strRcvSendBuffer);
 
   if (!l_oError) {
     // TODO parse and check register confirmation data
@@ -549,7 +546,7 @@ bool Client_JsonParseRegisterConfirmation(){
 //Parsing CurrentData
 void Client_JsonParseCurrentData() {
   StaticJsonDocument<RECEIVED_CHAR_LENGTH> l_oDoc;
-  DeserializationError l_oError = deserializeJson(l_oDoc, m_strRawReceivedData);
+  DeserializationError l_oError = deserializeJson(l_oDoc, m_strRcvSendBuffer);
 
   if (l_oError) {
     Serial.println("Error Parsing Json Current Data");
@@ -583,7 +580,7 @@ void Client_JsonParseCurrentData() {
 bool Client_JsonParseTransactionData() {
   bool l_zStatus = false;
   StaticJsonDocument<RECEIVED_CHAR_LENGTH> l_oParsedData;
-  DeserializationError l_oError = deserializeJson(l_oParsedData, m_strRawReceivedData);
+  DeserializationError l_oError = deserializeJson(l_oParsedData, m_strRcvSendBuffer);
 
   if (!l_oError) {
     //Parsing the Data And Move to Global Var
@@ -626,7 +623,7 @@ bool Client_JsonParseTransactionData() {
 //Parsing CurrentData
 void Client_JsonParseTransactionConfirmation() {
   StaticJsonDocument<RECEIVED_CHAR_LENGTH> l_oParsedData;
-  DeserializationError l_oError = deserializeJson(l_oParsedData, m_strRawReceivedData);
+  DeserializationError l_oError = deserializeJson(l_oParsedData, m_strRcvSendBuffer);
 
   if (l_oError) {
     Serial.println("Error Parsing Transaction Confirmation");
@@ -639,9 +636,9 @@ void Client_JsonParseTransactionConfirmation() {
   }
 }
 
-void Client_JsonParsePickingsConfirmation(int p_iBinIds) {
+bool Client_JsonParsePickingsConfirmation(int p_iBinIds) {
   StaticJsonDocument<RECEIVED_CHAR_LENGTH> l_oParsedData;
-  DeserializationError l_oError = deserializeJson(l_oParsedData, m_strRawReceivedData);
+  DeserializationError l_oError = deserializeJson(l_oParsedData, m_strRcvSendBuffer);
 
   if (l_oError) {
     Serial.println("Error Parsing Pickings Confirmation");
@@ -649,9 +646,9 @@ void Client_JsonParsePickingsConfirmation(int p_iBinIds) {
   }
   else { //Parsing the Data And Move to Global Var
     //Transaction_Status
-    bool transStatus = l_oParsedData["success"];
-    m_zConfirmationStatus = transStatus;
-    if (transStatus == true) {
+    bool l_zTransStatus = l_oParsedData["success"];
+    m_zConfirmationStatus = l_zTransStatus;
+    if (l_zTransStatus == true) {
       JsonObject l_oJsonTransactionData = l_oParsedData["data"];
       m_zaBinStatus[p_iBinIds] = false;
       //        m_straSkuName[p_iBinIds]=(const char*)l_oaJsonTransactionData["sku_name"];
@@ -660,6 +657,8 @@ void Client_JsonParsePickingsConfirmation(int p_iBinIds) {
       //        Serial.println(m_straSkuName[p_iBinIds]);
     }
   }
+
+  return m_zConfirmationStatus;
 }
 
 
@@ -676,7 +675,11 @@ void clearBuffer() {
     Serial1.read();
   }
 
-  m_strRawReceivedData = "";
+  for(int i=0; i<RECEIVED_CHAR_LENGTH; i++){
+    m_caReceivedChars[i] = NULL;
+  }
+
+  m_strRcvSendBuffer = "";
 }
 
 //Read Push Button
