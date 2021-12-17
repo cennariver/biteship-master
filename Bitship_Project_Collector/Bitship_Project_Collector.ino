@@ -63,7 +63,7 @@ char m_caReceivedChars[RECEIVED_CHAR_LENGTH];
 String m_strRcvSendBuffer;
 bool m_zNewData = false;
 //const char     HOST_ADDRESS[]  = "192.168.0.6";
-const char     HOST_ADDRESS[]  = "192.168.1.3";
+const char     HOST_ADDRESS[]  = "192.168.1.8";
 const int      HOST_PORT       = 3000;
 //rtu state
 uint8_t m_iaRtuState;
@@ -512,6 +512,9 @@ String Client_ReadSerialData(char p_chStartMarker, char p_chEndMarker) {
   static int l_iNdx = 0;
   char l_cReadChar;
   int l_iSerialLen = 0;
+
+  //waiting for some data
+  while(!m_oClient.available());
 
   //receive serial data if available
   if(m_oClient.available() > 0){
