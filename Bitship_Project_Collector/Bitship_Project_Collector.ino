@@ -63,7 +63,7 @@ char m_caReceivedChars[RECEIVED_CHAR_LENGTH];
 String m_strRcvSendBuffer;
 bool m_zNewData = false;
 //const char     HOST_ADDRESS[]  = "192.168.0.6";
-const char     HOST_ADDRESS[]  = "192.168.1.8";
+const char     HOST_ADDRESS[]  = "192.168.1.7";
 const int      HOST_PORT       = 3000;
 //rtu state
 uint8_t m_iaRtuState;
@@ -116,6 +116,8 @@ void setup() {
 
   //set rtu connected state
   setRtuState();
+
+  setLedOutput(true);
 }
 
 void loop() {
@@ -178,6 +180,7 @@ void loop() {
 
           //set rtu connected state
           setRtuState();
+          setLedOutput(false);
         }
       }
       break;
@@ -187,8 +190,10 @@ void loop() {
       Lcd_PrintCurrentBinData();
 
       //back to device registration if any device was connected/disconnected
-      if (isRtuStateChanged() != 0) {
+      if (isRtuStateChanged() != 0 ||
+          buttonWasPressed() != 0) {
         m_iaRtuState = RU_STATE_REGISTRATION;
+        setLedOutput(true);
         break;
       }
 
@@ -239,7 +244,7 @@ void loop() {
     case RU_STATE_TRANSACTION_PICKING:
       //display to LCD: transaction status and get rtu that need to be done
       uint8_t l_iActiveTransaction = Lcd_PrintTransactionState(true);
-      checkPushButton();
+      isPushButtonPressed();
 
       //process all done transaction for each bin
       for (int i = 0; i < REMOTE_UNIT_AMOUNT; i++) {
@@ -512,9 +517,18 @@ String Client_ReadSerialData(char p_chStartMarker, char p_chEndMarker) {
   static int l_iNdx = 0;
   char l_cReadChar;
   int l_iSerialLen = 0;
+  unsigned long l_lLastReadSerialData = millis();
 
   //waiting for some data
-  while(!m_oClient.available());
+  while(!m_oClient.available()){
+
+    // avoid infinite loop, declare timeout
+    if(millis() - l_lLastReadSerialData >= WIFI_TIMEOUT) {
+      clearBuffer();
+      Lcd_Print("Connection fail", "Try again in 1s");
+      break;
+    }
+  };
 
   //receive serial data if available
   if(m_oClient.available() > 0){
@@ -721,8 +735,21 @@ bool buttonWasPressed(int p_iPinButton) {
   return l_zStatusButton;
 }
 
+int buttonWasPressed() {
+
+  uint8_t l_iCounter = 0;
+
+  for (int i = 0; i < REMOTE_UNIT_AMOUNT; i++) {
+    if (buttonWasPressed(i)) {
+      l_iCounter++;
+    }
+  }
+
+  return l_iCounter;
+}
+
 //Complete Transaction Request Function
-void checkPushButton() {
+void isPushButtonPressed() {
   //Serial.println("Button Pressed");
   for (int i = 0; i < REMOTE_UNIT_AMOUNT; i++) {
   //Check Button are Pressed or Not
@@ -775,6 +802,16 @@ void setRtuState(){
       // RTU disconnected
       m_zaIsRtuConnected[i] = false;
 //      Serial.println("Disonnect: C" + COLLECTOR_IDENTIFIER + "B" + String(i+1));
+    }
+  }
+}
+
+void setLedOutput(bool p_zOutput){
+
+  for (int i = 0; i < REMOTE_UNIT_AMOUNT; i++) {
+
+    if (m_zaIsRtuConnected[i] == true) {
+      digitalWrite(PIN_LED[i], p_zOutput ? HIGH : LOW);
     }
   }
 }
