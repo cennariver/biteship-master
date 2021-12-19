@@ -417,7 +417,9 @@ int Lcd_PrintTransactionState(bool p_bIsExecutionState) {
           m_oaRtu[i].begin(16, 2);
           m_oaRtu[i].clear();
           m_oaRtu[i].setCursor(0, 0);
-          m_oaRtu[i].print("Waiting for confirmation");
+          m_oaRtu[i].print("Transaction on");
+          m_oaRtu[i].setCursor(0, 1);
+          m_oaRtu[i].print("confirmation ...");
         }
         m_oaRtu[i].print("C" + COLLECTOR_IDENTIFIER + "B" + String(i));
         digitalWrite(PIN_LED[i], HIGH); //LED ON
