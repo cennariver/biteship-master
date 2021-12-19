@@ -11,16 +11,16 @@ const uint8_t     PIN_D5             = 24;
 const uint8_t     PIN_D6             = 23;
 const uint8_t     PIN_D7             = 22;
 LiquidCrystal m_oaRtu[REMOTE_UNIT_AMOUNT] = {
-    LiquidCrystal (27, 26, PIN_D4, PIN_D5, PIN_D6, PIN_D7), // RTU_NUMBER_ONE
-    LiquidCrystal (29, 28, PIN_D4, PIN_D5, PIN_D6, PIN_D7), // RTU_NUMBER_TWO
-    LiquidCrystal (31, 30, PIN_D4, PIN_D5, PIN_D6, PIN_D7), // RTU_NUMBER_THREE
-    LiquidCrystal (33, 32, PIN_D4, PIN_D5, PIN_D6, PIN_D7), // RTU_NUMBER_FOUR
-    LiquidCrystal (35, 34, PIN_D4, PIN_D5, PIN_D6, PIN_D7), // RTU_NUMBER_FIVE
-    LiquidCrystal (37, 36, PIN_D4, PIN_D5, PIN_D6, PIN_D7), // RTU_NUMBER_SIX
-    LiquidCrystal (39, 38, PIN_D4, PIN_D5, PIN_D6, PIN_D7), // RTU_NUMBER_SEVEN
-    LiquidCrystal (41, 40, PIN_D4, PIN_D5, PIN_D6, PIN_D7), // RTU_NUMBER_EIGHT
-    LiquidCrystal (43, 42, PIN_D4, PIN_D5, PIN_D6, PIN_D7), // RTU_NUMBER_NINE
-    LiquidCrystal (45, 44, PIN_D4, PIN_D5, PIN_D6, PIN_D7)  // RTU_NUMBER_TEN
+  LiquidCrystal (27, 26, PIN_D4, PIN_D5, PIN_D6, PIN_D7), // RTU_NUMBER_ONE
+  LiquidCrystal (29, 28, PIN_D4, PIN_D5, PIN_D6, PIN_D7), // RTU_NUMBER_TWO
+  LiquidCrystal (31, 30, PIN_D4, PIN_D5, PIN_D6, PIN_D7), // RTU_NUMBER_THREE
+  LiquidCrystal (33, 32, PIN_D4, PIN_D5, PIN_D6, PIN_D7), // RTU_NUMBER_FOUR
+  LiquidCrystal (35, 34, PIN_D4, PIN_D5, PIN_D6, PIN_D7), // RTU_NUMBER_FIVE
+  LiquidCrystal (37, 36, PIN_D4, PIN_D5, PIN_D6, PIN_D7), // RTU_NUMBER_SIX
+  LiquidCrystal (39, 38, PIN_D4, PIN_D5, PIN_D6, PIN_D7), // RTU_NUMBER_SEVEN
+  LiquidCrystal (41, 40, PIN_D4, PIN_D5, PIN_D6, PIN_D7), // RTU_NUMBER_EIGHT
+  LiquidCrystal (43, 42, PIN_D4, PIN_D5, PIN_D6, PIN_D7), // RTU_NUMBER_NINE
+  LiquidCrystal (45, 44, PIN_D4, PIN_D5, PIN_D6, PIN_D7)  // RTU_NUMBER_TEN
 };
 //Pin for LED
 const uint8_t PIN_LED[REMOTE_UNIT_AMOUNT]        = {47, 46, 50, 52, 17, 16, 15, 14, 48, 49};
@@ -52,7 +52,7 @@ WiFiEspClient m_oClient;
 const String   COLLECTOR_IDENTIFIER            = "1";
 const String   API_REGISTER_RU                 = "/ru-registration-collector/" + COLLECTOR_IDENTIFIER;
 const String   API_GET_CURRENT_DATA            = "/get-current-data-by-collector/" + COLLECTOR_IDENTIFIER;
-const String   API_GET_TRANSACTION             = "/get-transaction-by-collector/"+ COLLECTOR_IDENTIFIER;
+const String   API_GET_TRANSACTION             = "/get-transaction-by-collector/" + COLLECTOR_IDENTIFIER;
 const String   API_TRANSACTION_CONFIRM         = "/confirm-on-process-by-collector/" + COLLECTOR_IDENTIFIER;
 const String   API_PICKING_CONFIRM             = "/confirm-done?bin_id=";
 const String   API_TRANSACTION_PICKING_1stPart = "/confirm-done?transaction_id=";
@@ -63,11 +63,11 @@ char m_caReceivedChars[RECEIVED_CHAR_LENGTH];
 String m_strRcvSendBuffer;
 bool m_zNewData = false;
 //const char     HOST_ADDRESS[]  = "192.168.0.6";
-const char     HOST_ADDRESS[]  = "192.168.1.7";
+const char     HOST_ADDRESS[]  = "192.168.1.6";
 const int      HOST_PORT       = 3000;
 //rtu state
 uint8_t m_iaRtuState;
-const uint8_t  RU_STATE_REGISTRATION               = 0;
+const uint8_t  RU_STATE_REGISTRATION              = 0;
 const uint8_t  RU_STATE_READY                     = RU_STATE_REGISTRATION + 1;
 const uint8_t  RU_STATE_IDLE                      = RU_STATE_READY + 1;
 const uint8_t  RU_STATE_TRANSACTION_CONFIRMATION  = RU_STATE_IDLE + 1;
@@ -90,6 +90,12 @@ bool m_zConfirmationStatus = false;
 
 /** Others */
 unsigned long m_ulCurrentMillis;
+const uint8_t     DESERIALIZE_JSON_OK                 = 0;
+const uint8_t     DESERIALIZE_JSON_EMPTY_INPUT        = 1;
+const uint8_t     DESERIALIZE_JSON_INCOMPLETE_OUTPUT  = 2;
+const uint8_t     DESERIALIZE_JSON_INVALID_INPUT      = 3;
+const uint8_t     DESERIALIZE_JSON_NO_MEMORY          = 4;
+const uint8_t     DESERIALIZE_JSON_TOO_DEEP           = 5;
 
 void setup() {
 
@@ -102,7 +108,7 @@ void setup() {
     //Setting Output for LED Relay
     pinMode(PIN_LED[i], OUTPUT);
     //Initialize LCD as display output
-    m_oaRtu[i].begin(16,2);
+    m_oaRtu[i].begin(16, 2);
   }
 
   //Initiate Serial Communication
@@ -123,7 +129,7 @@ void setup() {
 void loop() {
 
   m_ulCurrentMillis = millis();
-  Serial.println("WiFi:" + ((WiFi.status() == WL_CONNECTED) ? "WL_CONNECTED":String(WiFi.status())) + " | RTU:" + String(m_iaRtuState));
+  Serial.println("WiFi:" + ((WiFi.status() == WL_CONNECTED) ? "WL_CONNECTED" : String(WiFi.status())) + " | RTU:" + String(m_iaRtuState));
 
   //handling disconnected wifi
   if (WiFi.status() != WL_CONNECTED) {
@@ -140,24 +146,24 @@ void loop() {
       //construct registering device in json format
       m_strRcvSendBuffer = "{\"collector\": " + COLLECTOR_IDENTIFIER + ", \"status\": [";
       for (int i = 0; i < REMOTE_UNIT_AMOUNT; i++) {
-        m_strRcvSendBuffer += (i!=(REMOTE_UNIT_AMOUNT-1)) ? (String)m_zaIsRtuConnected[i]+"," : (String)m_zaIsRtuConnected[i];
+        m_strRcvSendBuffer += (i != (REMOTE_UNIT_AMOUNT - 1)) ? (String)m_zaIsRtuConnected[i] + "," : (String)m_zaIsRtuConnected[i];
       }
       m_strRcvSendBuffer += "]}";
 
       //post request to API register
-      if(Client_HttpPostRequest(API_REGISTER_RU, m_strRcvSendBuffer)){
+      if (Client_HttpPostRequest(API_REGISTER_RU, m_strRcvSendBuffer)) {
         //receive serial data
         Serial.println("post request success API_REGISTER_RU");
         m_strRcvSendBuffer = Client_ReadSerialData('<', '>');
         if (m_strRcvSendBuffer != "") {
           //parsed confirmation data
           Serial.println("some data available");
-          if(Client_JsonParseRegisterConfirmation()){
+          if (Client_JsonParseRegisterConfirmation()) {
             //continue to ready state
             Serial.println("registered");
-            clearBuffer();
             m_iaRtuState = RU_STATE_READY;
           }
+          clearBuffer();
         }
       }
       break;
@@ -167,20 +173,23 @@ void loop() {
       Lcd_PrintGettingBinData();
 
       //get request from API current data
-      if(Client_HttpGetRequest(API_GET_CURRENT_DATA)){
+      if (Client_HttpGetRequest(API_GET_CURRENT_DATA)) {
         //receive serial data
         Serial.println("get request success API_GET_CURRENT_DATA");
         m_strRcvSendBuffer = Client_ReadSerialData('<', '>');
         if (m_strRcvSendBuffer != "") {
           Serial.println("some data available");
-          //parsed bin data and continue to idle state
-          Client_JsonParseCurrentData();
-          clearBuffer();
-          m_iaRtuState = RU_STATE_IDLE;
+          //parsed bin data
+          if (Client_JsonParseCurrentData()) {
+            //continue to idle state
+            Serial.println("parsed bin data success");
+            m_iaRtuState = RU_STATE_IDLE;
 
-          //set rtu connected state
-          setRtuState();
-          setLedOutput(false);
+            //set rtu connected state
+            setRtuState();
+            setLedOutput(false);
+          }
+          clearBuffer();
         }
       }
       break;
@@ -200,7 +209,7 @@ void loop() {
       //request every specific period
       if (m_ulCurrentMillis - m_lLastGetActiveTransactionApi >= PERIOD_TIME_GET_ACTIVE_TRANSACTION) {
         //get request from API transaction data
-        if(Client_HttpGetRequest(API_GET_TRANSACTION)){
+        if (Client_HttpGetRequest(API_GET_TRANSACTION)) {
           //receive serial data
           // TODO sometimes it stuck in here
           Serial.println("get request success API_GET_TRANSACTION");
@@ -208,12 +217,12 @@ void loop() {
           if (m_strRcvSendBuffer != "") {
             //parsed transaction data
             Serial.println("some data available");
-            if(Client_JsonParseTransactionData()) {
+            if (Client_JsonParseTransactionData()) {
               //continue to transaction state
               Serial.println("transaction active");
-              clearBuffer();
               m_iaRtuState = RU_STATE_TRANSACTION_CONFIRMATION;
             }
+            clearBuffer();
           }
         }
         m_lLastGetActiveTransactionApi = m_ulCurrentMillis;
@@ -226,16 +235,19 @@ void loop() {
       Lcd_PrintTransactionState(false);
 
       //get request from API transaction confirmation data
-      if(Client_HttpGetRequest(API_TRANSACTION_CONFIRM)){
+      if (Client_HttpGetRequest(API_TRANSACTION_CONFIRM)) {
         //receive serial data
         Serial.println("get request success API_TRANSACTION_CONFIRM");
         m_strRcvSendBuffer = Client_ReadSerialData('<', '>');
         if (m_strRcvSendBuffer != "") {
           //parsed transaction confirmation data and continue to next state
           Serial.println("some data available");
-          Client_JsonParseTransactionConfirmation();
+          if (Client_JsonParseTransactionConfirmation()) {
+            //continue to idle state
+            Serial.println("parsed transaction confirmation success");
+            m_iaRtuState = RU_STATE_TRANSACTION_PICKING;
+          }
           clearBuffer();
-          m_iaRtuState = RU_STATE_TRANSACTION_PICKING;
         }
       }
       break;
@@ -251,8 +263,8 @@ void loop() {
         if (m_zaIsButtonPressed[i] == true) {
 
           //get request from API transaction picking data
-//            if(Client_HttpGetRequest("/confirm-done?transaction_id=" + m_strTransactionId + "&device_id=" + m_straBinId[i])){
-          if(Client_HttpGetRequest(API_TRANSACTION_PICKING_1stPart + m_strTransactionId + API_TRANSACTION_PICKING_2ndPart + m_straBinId[i])){
+          //            if(Client_HttpGetRequest("/confirm-done?transaction_id=" + m_strTransactionId + "&device_id=" + m_straBinId[i])){
+          if (Client_HttpGetRequest(API_TRANSACTION_PICKING_1stPart + m_strTransactionId + API_TRANSACTION_PICKING_2ndPart + m_straBinId[i])) {
             //receive serial data
             Serial.println("get request success API_TRANSACTION_PICKING");
             m_strRcvSendBuffer = Client_ReadSerialData('<', '>');
@@ -261,7 +273,7 @@ void loop() {
               Serial.println("some data available");
               if (Client_JsonParsePickingsConfirmation(i)) {
                 // transaction picking for specific bin is done
-                Serial.println("transaction done for RTU " + String(i+1));
+                Serial.println("transaction done for RTU " + String(i + 1));
                 m_zaIsButtonPressed[i] = false;
                 m_zaBinStatus[i] = false;
               }
@@ -275,13 +287,13 @@ void loop() {
       if (l_iActiveTransaction == 0) {
 
         //reset all values
-        for(int i=0; i<REMOTE_UNIT_AMOUNT; i++){
+        for (int i = 0; i < REMOTE_UNIT_AMOUNT; i++) {
           m_zaBinStatus[i] = false;
           m_straBinId[i] = "";
           m_straActionCode[i] = "";
           m_iaActionQty[i] = 0;
         }
-        m_strTransactionExecution ="";
+        m_strTransactionExecution = "";
         m_zConfirmationStatus = false;
 
         //back to IDLE state
@@ -296,7 +308,7 @@ void loop() {
 //Function print to specific LCD
 void Lcd_Print(LiquidCrystal p_oLcd, String p_strFirstRow, String p_strSecondRow) {
 
-  p_oLcd.begin(16,2);
+  p_oLcd.begin(16, 2);
   p_oLcd.clear();
   p_oLcd.setCursor(0, 0);
   p_oLcd.print(p_strFirstRow);
@@ -305,30 +317,30 @@ void Lcd_Print(LiquidCrystal p_oLcd, String p_strFirstRow, String p_strSecondRow
 }
 
 //Function print to all LCD
-void Lcd_Print(String p_strFirstRow, String p_strSecondRow){
+void Lcd_Print(String p_strFirstRow, String p_strSecondRow) {
 
   for (int i = 0; i < REMOTE_UNIT_AMOUNT; i++) {
     Lcd_Print(m_oaRtu[i], p_strFirstRow, p_strSecondRow);
   }
 }
 
-void Lcd_PrintCantConnectToRaspi(){
+void Lcd_PrintCantConnectToRaspi() {
   Lcd_Print("Connection fail", "Try again in 1s");
   //give delay to try again
   delay(1000);
 }
 
-void Lcd_PrintDeviceNotRegistered(int p_iBinId){
+void Lcd_PrintDeviceNotRegistered(int p_iBinId) {
 
-  Lcd_Print(m_oaRtu[p_iBinId], "RU: C" + COLLECTOR_IDENTIFIER + "B" + String(p_iBinId+1), "Status:Unregistered");
+  Lcd_Print(m_oaRtu[p_iBinId], "RU: C" + COLLECTOR_IDENTIFIER + "B" + String(p_iBinId + 1), "Status:Unregistered");
 }
 
 void Lcd_PrintRegisteringDevice() {
   for (int i = 0; i < REMOTE_UNIT_AMOUNT; i++) {
-    if(m_zaIsRtuConnected[i]){
-      Lcd_Print(m_oaRtu[i], "Registering", "C" + COLLECTOR_IDENTIFIER + "B" + String(i+1) + " Please Wait");
+    if (m_zaIsRtuConnected[i]) {
+      Lcd_Print(m_oaRtu[i], "Registering", "C" + COLLECTOR_IDENTIFIER + "B" + String(i + 1) + " Please Wait");
     }
-    else{
+    else {
       Lcd_PrintDeviceNotRegistered(i);
     }
   }
@@ -336,10 +348,10 @@ void Lcd_PrintRegisteringDevice() {
 
 void Lcd_PrintGettingBinData() {
   for (int i = 0; i < REMOTE_UNIT_AMOUNT; i++) {
-    if(m_zaIsRtuConnected[i]){
-      Lcd_Print(m_oaRtu[i], "Getting bin data", "C" + COLLECTOR_IDENTIFIER + "B" + String(i+1) + " Please Wait");
+    if (m_zaIsRtuConnected[i]) {
+      Lcd_Print(m_oaRtu[i], "Getting bin data", "C" + COLLECTOR_IDENTIFIER + "B" + String(i + 1) + " Please Wait");
     }
-    else{
+    else {
       Lcd_PrintDeviceNotRegistered(i);
     }
   }
@@ -347,17 +359,17 @@ void Lcd_PrintGettingBinData() {
 
 void Lcd_PrintCurrentBinData(int p_iaBinId) {
   for (int i = 0; i < REMOTE_UNIT_AMOUNT; i++) {
-    if(m_zaIsRtuConnected[i]){
-      m_oaRtu[i].begin(16,2);
+    if (m_zaIsRtuConnected[i]) {
+      m_oaRtu[i].begin(16, 2);
       m_oaRtu[i].clear();
-      m_oaRtu[i].setCursor(0,0);
+      m_oaRtu[i].setCursor(0, 0);
       m_oaRtu[i].print("SKU:" + m_straSkuName[i]);
-      m_oaRtu[i].setCursor(0,1);
+      m_oaRtu[i].setCursor(0, 1);
       m_oaRtu[i].print("Qty:" + String(m_iaSkuQty[i]));
-      m_oaRtu[i].setCursor(10,1);
-      m_oaRtu[i].print("C" + COLLECTOR_IDENTIFIER + "B" + String(i+1));
+      m_oaRtu[i].setCursor(10, 1);
+      m_oaRtu[i].print("C" + COLLECTOR_IDENTIFIER + "B" + String(i + 1));
     }
-    else{
+    else {
       Lcd_PrintDeviceNotRegistered(i);
     }
   }
@@ -365,47 +377,47 @@ void Lcd_PrintCurrentBinData(int p_iaBinId) {
 
 void Lcd_PrintCurrentBinData() {
   for (int i = 0; i < REMOTE_UNIT_AMOUNT; i++) {
-    if(m_zaIsRtuConnected[i]){
+    if (m_zaIsRtuConnected[i]) {
       Lcd_PrintCurrentBinData(i);
     }
-    else{
+    else {
       Lcd_PrintDeviceNotRegistered(i);
     }
   }
 }
 
-int Lcd_PrintTransactionState(bool p_bIsExecutionState){
+int Lcd_PrintTransactionState(bool p_bIsExecutionState) {
 
   int l_iActiveTransaction = 0;
 
   for (int i = 0; i < REMOTE_UNIT_AMOUNT; i++) {
-    if(m_zaIsRtuConnected[i]){
-      if(m_zaBinStatus[i]){
+    if (m_zaIsRtuConnected[i]) {
+      if (m_zaBinStatus[i]) {
         if (p_bIsExecutionState) {
-          m_oaRtu[i].begin(16,2);
+          m_oaRtu[i].begin(16, 2);
           m_oaRtu[i].clear();
           m_oaRtu[i].setCursor(0, 0);
           m_oaRtu[i].print("Act:" + m_straActionCode[i]);
           m_oaRtu[i].setCursor(0, 1);
           m_oaRtu[i].print("Qty:" + String(m_iaActionQty[i]));
-          m_oaRtu[i].setCursor(10,1);
+          m_oaRtu[i].setCursor(10, 1);
         } else {
-          m_oaRtu[i].begin(16,2);
+          m_oaRtu[i].begin(16, 2);
           m_oaRtu[i].clear();
           m_oaRtu[i].setCursor(0, 0);
           m_oaRtu[i].print("Waiting for confirmation");
         }
-        m_oaRtu[i].print("C" + COLLECTOR_IDENTIFIER + "B" + String(i+1));
+        m_oaRtu[i].print("C" + COLLECTOR_IDENTIFIER + "B" + String(i + 1));
         digitalWrite(PIN_LED[i], HIGH); //LED ON
 
         l_iActiveTransaction++;
       }
-      else{
+      else {
         Lcd_PrintCurrentBinData(i);
         digitalWrite(PIN_LED[i], LOW); //LED OFF
       }
     }
-    else{
+    else {
       Lcd_PrintDeviceNotRegistered(i);
     }
   }
@@ -473,12 +485,12 @@ bool Client_HttpPostRequest (String p_strQuery, String p_strPayload) {
     m_oClient.println("Connection: keep-alive");
     m_oClient.println("Accept: application/json");
     m_oClient.println(("Content-Type: application/json"));
-    m_oClient.println("Content-Length: " +String(p_strPayload.length()+1));
+    m_oClient.println("Content-Length: " + String(p_strPayload.length() + 1));
     m_oClient.println();
     m_oClient.println((p_strPayload));
     Serial.println((p_strPayload));
 
-    if(m_oClient.status() == ESTABLISHED){
+    if (m_oClient.status() == ESTABLISHED) {
       return true;
     }
   }
@@ -520,10 +532,10 @@ String Client_ReadSerialData(char p_chStartMarker, char p_chEndMarker) {
   unsigned long l_lLastReadSerialData = millis();
 
   //waiting for some data
-  while(!m_oClient.available()){
+  while (!m_oClient.available()) {
 
     // avoid infinite loop, declare timeout
-    if(millis() - l_lLastReadSerialData >= WIFI_TIMEOUT) {
+    if (millis() - l_lLastReadSerialData >= WIFI_TIMEOUT) {
       clearBuffer();
       Lcd_Print("Connection fail", "Try again in 1s");
       break;
@@ -531,12 +543,12 @@ String Client_ReadSerialData(char p_chStartMarker, char p_chEndMarker) {
   };
 
   //receive serial data if available
-  if(m_oClient.available() > 0){
+  if (m_oClient.available() > 0) {
     //get length of incoming data
     l_iSerialLen = m_oClient.available();
 
     //get using for loop
-    for(int i=0; i<l_iSerialLen; i++){
+    for (int i = 0; i < l_iSerialLen; i++) {
       l_cReadChar = m_oClient.read();
 
       if (l_zRecvInProgress == true) {
@@ -568,52 +580,57 @@ String Client_ReadSerialData(char p_chStartMarker, char p_chEndMarker) {
   return m_caReceivedChars;
 }
 
-bool Client_JsonParseRegisterConfirmation(){
+bool Client_JsonParseRegisterConfirmation() {
 
   StaticJsonDocument<RECEIVED_CHAR_LENGTH> l_oParsedData;
   DeserializationError l_oError = deserializeJson(l_oParsedData, m_strRcvSendBuffer);
 
-  if (!l_oError) {
+  if (l_oError == DESERIALIZE_JSON_OK) {
     // TODO parse and check register confirmation data
 
     return true;
   }
 
-  Serial.println("Error Parsing Register Confirmation");
+  Serial.println("Error Parsing Register Confirmation, error code ");
+  printDeserializeJsonErrorCode(l_oError);
   return false;
 }
 
 //Parsing CurrentData
-void Client_JsonParseCurrentData() {
+bool Client_JsonParseCurrentData() {
   StaticJsonDocument<RECEIVED_CHAR_LENGTH> l_oDoc;
   DeserializationError l_oError = deserializeJson(l_oDoc, m_strRcvSendBuffer);
 
-  if (l_oError) {
-    Serial.println("Error Parsing Json Current Data");
+  if (l_oError == DESERIALIZE_JSON_OK) {
+    //Status Data
+    bool l_zStatus = l_oDoc["success"];
+
+    //Function Code
+    String l_strMessage = l_oDoc["message"];
+
+    //Data Object (10 RU , SKU Name, Bin ID,
+    JsonObject l_oData = l_oDoc["data"];
+    JsonArray l_oaArrayData = l_oDoc["data"].as<JsonArray>();
+
+    //Parsing Array Data For 10 SKU
+    for (int i = 0; i < REMOTE_UNIT_AMOUNT; i++) {
+      JsonObject l_oSku = l_oaArrayData[i];
+      String l_strDeviceId = (const char*)l_oSku["device_id"];
+      int l_iBinId = l_strDeviceId.substring(3).toInt();
+      String l_strSkuName = (const char*)l_oSku["sku_name"];
+      int l_iSkuQty = (int)l_oSku["quantity"];
+
+      // save to global variable
+      m_straSkuName[l_iBinId] = l_strSkuName;
+      m_iaSkuQty[l_iBinId] = l_iSkuQty;
+    }
+
+    return true;
   }
 
-  //Status Data
-  bool l_zStatus = l_oDoc["success"];
-
-  //Function Code
-  String l_strMessage = l_oDoc["message"];
-
-  //Data Object (10 RU , SKU Name, Bin ID,
-  JsonObject l_oData = l_oDoc["data"];
-  JsonArray l_oaArrayData = l_oDoc["data"].as<JsonArray>();
-
-  //Parsing Array Data For 10 SKU
-  for (int i = 0; i < REMOTE_UNIT_AMOUNT; i++) {
-    JsonObject l_oSku = l_oaArrayData[i];
-    String l_strDeviceId = (const char*)l_oSku["device_id"];
-    int l_iBinId = l_strDeviceId.substring(3).toInt();
-    String l_strSkuName = (const char*)l_oSku["sku_name"];
-    int l_iSkuQty = (int)l_oSku["quantity"];
-
-    // save to global variable
-    m_straSkuName[l_iBinId] = l_strSkuName;
-    m_iaSkuQty[l_iBinId] = l_iSkuQty;
-  }
+  Serial.print("Error Parsing Current Data, error code ");
+  printDeserializeJsonErrorCode(l_oError);
+  return false;
 }
 
 //Parsing transaction data
@@ -622,7 +639,7 @@ bool Client_JsonParseTransactionData() {
   StaticJsonDocument<RECEIVED_CHAR_LENGTH> l_oParsedData;
   DeserializationError l_oError = deserializeJson(l_oParsedData, m_strRcvSendBuffer);
 
-  if (!l_oError) {
+  if (l_oError == DESERIALIZE_JSON_OK) {
     //Parsing the Data And Move to Global Var
     //Transaction_Status
     l_zStatus = l_oParsedData["success"];
@@ -656,35 +673,36 @@ bool Client_JsonParseTransactionData() {
     }
   }
 
+  Serial.println("Error Parsing Transaction Data, error code ");
+  printDeserializeJsonErrorCode(l_oError);
   return false;
-  Serial.println("Error Parsing Json Transaction Data");
 }
 
 //Parsing CurrentData
-void Client_JsonParseTransactionConfirmation() {
+bool Client_JsonParseTransactionConfirmation() {
   StaticJsonDocument<RECEIVED_CHAR_LENGTH> l_oParsedData;
   DeserializationError l_oError = deserializeJson(l_oParsedData, m_strRcvSendBuffer);
 
-  if (l_oError) {
-    Serial.println("Error Parsing Transaction Confirmation");
-  }
-  //Parsing the Data And Move to Global Var
-  else {
+  if (l_oError == DESERIALIZE_JSON_OK) {
+    //Parsing the Data And Move to Global Var
     //Transaction_Status
     JsonObject l_oJsonTransactionData = l_oParsedData["data"];
     m_strTransactionExecution = (const char*)l_oJsonTransactionData["status"];
+
+    return true;
   }
+
+  Serial.println("Error Parsing Transaction Confirmation, error code ");
+  printDeserializeJsonErrorCode(l_oError);
+  return false;
 }
 
 bool Client_JsonParsePickingsConfirmation(int p_iBinIds) {
   StaticJsonDocument<RECEIVED_CHAR_LENGTH> l_oParsedData;
   DeserializationError l_oError = deserializeJson(l_oParsedData, m_strRcvSendBuffer);
 
-  if (l_oError) {
-    Serial.println("Error Parsing Pickings Confirmation");
-    m_zConfirmationStatus = false;
-  }
-  else { //Parsing the Data And Move to Global Var
+  if (l_oError == DESERIALIZE_JSON_OK) {
+    //Parsing the Data And Move to Global Var
     //Transaction_Status
     bool l_zTransStatus = l_oParsedData["success"];
     m_zConfirmationStatus = l_zTransStatus;
@@ -696,13 +714,35 @@ bool Client_JsonParsePickingsConfirmation(int p_iBinIds) {
       Serial.println(m_zaBinStatus[p_iBinIds]);
       //        Serial.println(m_straSkuName[p_iBinIds]);
     }
+
+    return m_zConfirmationStatus;
   }
 
-  return m_zConfirmationStatus;
+  Serial.println("Error Parsing Picking Confirmation, error code ");
+  printDeserializeJsonErrorCode(l_oError);
+  return false;
 }
 
 
 /** Other Function **/
+void printDeserializeJsonErrorCode(DeserializationError p_oError) {
+  if (p_oError == DESERIALIZE_JSON_OK) {
+    Serial.println("DESERIALIZE_JSON_OK");
+  } else if (p_oError == DESERIALIZE_JSON_EMPTY_INPUT) {
+    Serial.println("DESERIALIZE_JSON_EMPTY_INPUT");
+  } else if (p_oError == DESERIALIZE_JSON_INCOMPLETE_OUTPUT) {
+    Serial.println("DESERIALIZE_JSON_INCOMPLETE_OUTPUT");
+  } else if (p_oError == DESERIALIZE_JSON_INVALID_INPUT) {
+    Serial.println("DESERIALIZE_JSON_INVALID_INPUT");
+  } else if (p_oError == DESERIALIZE_JSON_NO_MEMORY) {
+    Serial.println("DESERIALIZE_JSON_NO_MEMORY");
+  } else if (p_oError == DESERIALIZE_JSON_TOO_DEEP) {
+    Serial.println("DESERIALIZE_JSON_TOO_DEEP");
+  } else {
+    Serial.println("DESERIALIZE_JSON_UNKNOWN");
+  }
+}
+
 //Clear Buffer
 void clearBuffer() {
   //clear Buffer
@@ -716,7 +756,7 @@ void clearBuffer() {
   }
 
   //clear global variable that has been used for receive serial data
-  for(int i=0; i<RECEIVED_CHAR_LENGTH; i++){
+  for (int i = 0; i < RECEIVED_CHAR_LENGTH; i++) {
     m_caReceivedChars[i] = NULL;
   }
   m_strRcvSendBuffer = "";
@@ -752,7 +792,7 @@ int buttonWasPressed() {
 void isPushButtonPressed() {
   //Serial.println("Button Pressed");
   for (int i = 0; i < REMOTE_UNIT_AMOUNT; i++) {
-  //Check Button are Pressed or Not
+    //Check Button are Pressed or Not
     if (buttonWasPressed(PIN_BUTTON[i]) && (m_zaBinStatus[i] == true)) {
       m_zaIsButtonPressed[i] = true;
       Serial.println("Button Was Pressed : " + String(i));
@@ -768,8 +808,8 @@ int isRtuStateChanged() {
 
   for (int i = 0; i < REMOTE_UNIT_AMOUNT; i++) {
 
-  // RTU just connected and last state is not connected
-    if (digitalRead(PIN_DETECT_RU[i]) == LOW && m_zaIsRtuConnected[i] == false){
+    // RTU just connected and last state is not connected
+    if (digitalRead(PIN_DETECT_RU[i]) == LOW && m_zaIsRtuConnected[i] == false) {
       m_zaIsRtuConnected[i] = true;
       Serial.println("RTU Was Connect : " + String(i));
       Serial.println(m_zaIsRtuConnected[i]);
@@ -785,28 +825,28 @@ int isRtuStateChanged() {
     }
   }
 
-//  Serial.println("How many devices that was just connected/disconnected: " + String(l_iAnyDeviceChange));
+  //  Serial.println("How many devices that was just connected/disconnected: " + String(l_iAnyDeviceChange));
   return l_iAnyDeviceChange;
 }
 
-void setRtuState(){
+void setRtuState() {
 
   for (int i = 0; i < REMOTE_UNIT_AMOUNT; i++) {
     // Check the availability of RTU
-    if(digitalRead(PIN_DETECT_RU[i]) == LOW) {
+    if (digitalRead(PIN_DETECT_RU[i]) == LOW) {
       // RTU connected
       m_zaIsRtuConnected[i] = true;
-//      Serial.println("Connect: C" + COLLECTOR_IDENTIFIER + "B" + String(i+1));
+      //      Serial.println("Connect: C" + COLLECTOR_IDENTIFIER + "B" + String(i+1));
     }
-    else{
+    else {
       // RTU disconnected
       m_zaIsRtuConnected[i] = false;
-//      Serial.println("Disonnect: C" + COLLECTOR_IDENTIFIER + "B" + String(i+1));
+      //      Serial.println("Disonnect: C" + COLLECTOR_IDENTIFIER + "B" + String(i+1));
     }
   }
 }
 
-void setLedOutput(bool p_zOutput){
+void setLedOutput(bool p_zOutput) {
 
   for (int i = 0; i < REMOTE_UNIT_AMOUNT; i++) {
 
