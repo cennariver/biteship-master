@@ -10,7 +10,7 @@ const uint8_t     PIN_D4             = 25;
 const uint8_t     PIN_D5             = 24;
 const uint8_t     PIN_D6             = 23;
 const uint8_t     PIN_D7             = 22;
-LiquidCrystal m_oaRtu[REMOTE_UNIT_AMOUNT] = {LiquidCrystal (27, 26, PIN_D4, PIN_D5, PIN_D6, PIN_D7), // not used
+LiquidCrystal m_oaRtu[REMOTE_UNIT_AMOUNT] = {LiquidCrystal (27, 26, PIN_D4, PIN_D5, PIN_D6, PIN_D7), // not used, NULL not supported
                                              LiquidCrystal (27, 26, PIN_D4, PIN_D5, PIN_D6, PIN_D7), // RTU_NUMBER_ONE
                                              LiquidCrystal (29, 28, PIN_D4, PIN_D5, PIN_D6, PIN_D7), // RTU_NUMBER_TWO
                                              LiquidCrystal (31, 30, PIN_D4, PIN_D5, PIN_D6, PIN_D7), // RTU_NUMBER_THREE
@@ -23,22 +23,22 @@ LiquidCrystal m_oaRtu[REMOTE_UNIT_AMOUNT] = {LiquidCrystal (27, 26, PIN_D4, PIN_
                                              LiquidCrystal (45, 44, PIN_D4, PIN_D5, PIN_D6, PIN_D7)  // RTU_NUMBER_TEN
                                             };
 //Pin for LED
-const uint8_t PIN_LED[REMOTE_UNIT_AMOUNT]        = {0,
+const uint8_t PIN_LED[REMOTE_UNIT_AMOUNT]        = {NULL,
                                                     47, 46, 50, 52, 17, 16, 15, 14, 48, 49
                                                    };
 //Pin for Push Button
-const uint8_t PIN_BUTTON[REMOTE_UNIT_AMOUNT]     = {0,
+const uint8_t PIN_BUTTON[REMOTE_UNIT_AMOUNT]     = {NULL,
                                                     2, 3, 4, 5, 6, 7, 8, 9, 10, 11
                                                    };
-bool m_zaIsButtonPressed[REMOTE_UNIT_AMOUNT]     = {false,
+bool m_zaIsButtonPressed[REMOTE_UNIT_AMOUNT]     = {NULL,
                                                     false, false, false, false, false,
                                                     false, false, false, false, false
                                                    };
 //Pin for RTU Detector
-const uint8_t PIN_DETECT_RU[REMOTE_UNIT_AMOUNT]  = {0,
+const uint8_t PIN_DETECT_RU[REMOTE_UNIT_AMOUNT]  = {NULL,
                                                     A15, A14, A13, A12, A11, A10, A9, A8, A7, A6
                                                    };
-bool m_zaIsRtuConnected[REMOTE_UNIT_AMOUNT]      = {false,
+bool m_zaIsRtuConnected[REMOTE_UNIT_AMOUNT]      = {NULL,
                                                     false, false, false, false, false,
                                                     false, false, false, false, false
                                                    };
@@ -75,7 +75,7 @@ char m_caReceivedChars[RECEIVED_CHAR_LENGTH];
 String m_strRcvSendBuffer;
 bool m_zNewData = false;
 //const char     HOST_ADDRESS[]  = "192.168.0.6";
-const char     HOST_ADDRESS[]  = "192.168.1.6";
+const char     HOST_ADDRESS[]  = "192.168.1.7";
 const int      HOST_PORT       = 3000;
 //rtu state
 uint8_t m_iaRtuState;
@@ -112,7 +112,7 @@ const uint8_t     DESERIALIZE_JSON_TOO_DEEP           = 5;
 void setup() {
 
   //Setting input and output for the collector
-  for (int i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
+  for (uint8_t i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
 
     //Activate Pull UP for Push Button and RTU detector, default: high, pressed: low
     pinMode(PIN_BUTTON[i], INPUT_PULLUP);
@@ -157,7 +157,7 @@ void loop() {
 
       //construct registering device in json format
       m_strRcvSendBuffer = "{\"collector\": " + COLLECTOR_IDENTIFIER + ", \"status\": [";
-      for (int i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
+      for (uint8_t i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
         m_strRcvSendBuffer += (i != (REMOTE_UNIT_AMOUNT - 1)) ? (String)m_zaIsRtuConnected[i] + "," : (String)m_zaIsRtuConnected[i];
       }
       m_strRcvSendBuffer += "]}";
@@ -271,7 +271,7 @@ void loop() {
       isPushButtonPressed();
 
       //process all done transaction for each bin
-      for (int i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
+      for (uint8_t i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
         if (m_zaIsButtonPressed[i] == true) {
           Lcd_Print(i, "Send Done Status", "On loading. . .");
 
@@ -286,12 +286,12 @@ void loop() {
               if (Client_JsonParsePickingsConfirmation(i)) {
                 // transaction picking for specific bin is done
                 Serial.println("transaction done for RTU " + String(i));
-                m_zaIsButtonPressed[i] = false;
                 m_zaBinStatus[i] = false;
               }
               clearBuffer();
             }
           }
+          m_zaIsButtonPressed[i] = false;
         }
       }
 
@@ -299,7 +299,7 @@ void loop() {
       if (l_iActiveTransaction == 0) {
 
         //reset all values
-        for (int i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
+        for (uint8_t i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
           m_zaBinStatus[i] = false;
           m_straBinId[i] = "";
           m_straActionCode[i] = "";
@@ -318,7 +318,7 @@ void loop() {
 
 /** LCD Related Function */
 //Function print to specific LCD
-void Lcd_Print(int p_iBinId, String p_strFirstRow, String p_strSecondRow) {
+void Lcd_Print(uint8_t p_iBinId, String p_strFirstRow, String p_strSecondRow) {
 
   m_oaRtu[p_iBinId].begin(16, 2);
   m_oaRtu[p_iBinId].clear();
@@ -331,7 +331,7 @@ void Lcd_Print(int p_iBinId, String p_strFirstRow, String p_strSecondRow) {
 //Function print to all LCD
 void Lcd_Print(String p_strFirstRow, String p_strSecondRow) {
 
-  for (int i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
+  for (uint8_t i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
     Lcd_Print(i, p_strFirstRow, p_strSecondRow);
   }
 }
@@ -342,13 +342,13 @@ void Lcd_PrintCantConnectToRaspi() {
   delay(1000);
 }
 
-void Lcd_PrintDeviceNotRegistered(int p_iBinId) {
+void Lcd_PrintDeviceNotRegistered(uint8_t p_iBinId) {
 
-  Lcd_Print(p_iBinId, "RU: C" + COLLECTOR_IDENTIFIER + "B" + String(p_iBinId), "Status:Unregistered");
+  Lcd_Print(p_iBinId, "RU: C" + COLLECTOR_IDENTIFIER + "B" + String(p_iBinId), "Unregistered");
 }
 
 void Lcd_PrintRegisteringDevice() {
-  for (int i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
+  for (uint8_t i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
     if (m_zaIsRtuConnected[i]) {
       Lcd_Print(i, "Registering", "C" + COLLECTOR_IDENTIFIER + "B" + String(i) + " Please Wait");
     }
@@ -359,7 +359,7 @@ void Lcd_PrintRegisteringDevice() {
 }
 
 void Lcd_PrintGettingBinData() {
-  for (int i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
+  for (uint8_t i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
     if (m_zaIsRtuConnected[i]) {
       Lcd_Print(i, "Getting bin data", "C" + COLLECTOR_IDENTIFIER + "B" + String(i) + " Please Wait");
     }
@@ -369,7 +369,7 @@ void Lcd_PrintGettingBinData() {
   }
 }
 
-void Lcd_PrintCurrentBinData(int p_iaBinId) {
+void Lcd_PrintCurrentBinData(uint8_t p_iaBinId) {
   if (m_zaIsRtuConnected[p_iaBinId]) {
     m_oaRtu[p_iaBinId].begin(16, 2);
     m_oaRtu[p_iaBinId].clear();
@@ -386,7 +386,7 @@ void Lcd_PrintCurrentBinData(int p_iaBinId) {
 }
 
 void Lcd_PrintCurrentBinData() {
-  for (int i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
+  for (uint8_t i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
     if (m_zaIsRtuConnected[i]) {
       Lcd_PrintCurrentBinData(i);
     }
@@ -400,7 +400,7 @@ int Lcd_PrintTransactionState(bool p_bIsExecutionState) {
 
   int l_iActiveTransaction = 0;
 
-  for (int i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
+  for (uint8_t i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
     if (m_zaIsRtuConnected[i]) {
       if (m_zaBinStatus[i]) {
         if (p_bIsExecutionState) {
@@ -668,8 +668,8 @@ bool Client_JsonParseTransactionData() {
       JsonArray l_oaArrayTransaction = l_oParsedData["data"].as<JsonArray>();
       //Parsing Array Transaction Data For x SKU
 
-      for (int i = 0; i < REMOTE_UNIT_AMOUNT; i++) {
-        JsonObject l_oJsonTransactionData = l_oaArrayTransaction[i];
+      for (uint8_t i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
+        JsonObject l_oJsonTransactionData = l_oaArrayTransaction[i-1];
         //Get Local Var
         String l_strBinId = (const char*)l_oJsonTransactionData["device_id"];
         String l_strActionCode = (const char*)l_oJsonTransactionData["action"];
@@ -782,7 +782,7 @@ void clearBuffer() {
 }
 
 //Read Push Button
-bool buttonWasPressed(int p_iPinButton) {
+bool buttonWasPressed(uint8_t p_iPinButton) {
   bool l_zStatusButton = false;
 
   if (digitalRead(p_iPinButton) == LOW) {
@@ -798,7 +798,7 @@ int buttonWasPressed() {
 
   uint8_t l_iCounter = 0;
 
-  for (int i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
+  for (uint8_t i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
     if (buttonWasPressed(i)) {
       l_iCounter++;
     }
@@ -810,7 +810,7 @@ int buttonWasPressed() {
 //Complete Transaction Request Function
 void isPushButtonPressed() {
   //Serial.println("Button Pressed");
-  for (int i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
+  for (uint8_t i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
     //Check Button are Pressed or Not
     if (buttonWasPressed(PIN_BUTTON[i]) && (m_zaBinStatus[i] == true)) {
       m_zaIsButtonPressed[i] = true;
@@ -825,7 +825,7 @@ int isRtuStateChanged() {
 
   int l_iAnyDeviceChange = 0;
 
-  for (int i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
+  for (uint8_t i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
 
     // RTU just connected and last state is not connected
     if (digitalRead(PIN_DETECT_RU[i]) == LOW && m_zaIsRtuConnected[i] == false) {
@@ -850,7 +850,7 @@ int isRtuStateChanged() {
 
 void setRtuState() {
 
-  for (int i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
+  for (uint8_t i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
     // Check the availability of RTU
     if (digitalRead(PIN_DETECT_RU[i]) == LOW) {
       // RTU connected
@@ -867,7 +867,7 @@ void setRtuState() {
 
 void setLedOutput(bool p_zOutput) {
 
-  for (int i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
+  for (uint8_t i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
 
     if (m_zaIsRtuConnected[i] == true) {
       digitalWrite(PIN_LED[i], p_zOutput ? HIGH : LOW);
