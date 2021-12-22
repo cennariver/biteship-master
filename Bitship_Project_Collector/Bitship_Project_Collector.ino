@@ -61,7 +61,7 @@ WiFiEspClient m_oClient;
 
 
 /** Client */
-const String   COLLECTOR_IDENTIFIER            = "1";
+const String   COLLECTOR_IDENTIFIER            = "2";
 const String   API_REGISTER_RU                 = "/ru-registration-collector/" + COLLECTOR_IDENTIFIER;
 const String   API_GET_CURRENT_DATA            = "/get-current-data-by-collector/" + COLLECTOR_IDENTIFIER;
 const String   API_GET_TRANSACTION             = "/get-transaction-by-collector/" + COLLECTOR_IDENTIFIER;
@@ -75,7 +75,7 @@ char m_caReceivedChars[RECEIVED_CHAR_LENGTH];
 String m_strRcvSendBuffer;
 bool m_zNewData = false;
 //const char     HOST_ADDRESS[]  = "192.168.0.6";
-const char     HOST_ADDRESS[]  = "192.168.1.7";
+const char     HOST_ADDRESS[]  = "192.168.1.5";
 const int      HOST_PORT       = 3000;
 //rtu state
 uint8_t m_iaRtuState;
@@ -84,6 +84,11 @@ const uint8_t  RU_STATE_READY                     = RU_STATE_REGISTRATION + 1;
 const uint8_t  RU_STATE_IDLE                      = RU_STATE_READY + 1;
 const uint8_t  RU_STATE_TRANSACTION_CONFIRMATION  = RU_STATE_IDLE + 1;
 const uint8_t  RU_STATE_TRANSACTION_PICKING       = RU_STATE_TRANSACTION_CONFIRMATION + 1;
+//RU state-register variable
+bool m_zaRtuRegistered[REMOTE_UNIT_AMOUNT] = {NULL,
+                                             false, false, false, false, false,
+                                             false, false, false, false, false
+                                            };
 //RU state-ready variable
 String m_straSkuName[REMOTE_UNIT_AMOUNT];
 int m_iaSkuQty[REMOTE_UNIT_AMOUNT];
@@ -136,6 +141,7 @@ void setup() {
   setRtuState();
 
   setLedOutput(true);
+  clearBinStatus();
 }
 
 void loop() {
@@ -215,6 +221,7 @@ void loop() {
           buttonWasPressed() != 0) {
         m_iaRtuState = RU_STATE_REGISTRATION;
         setLedOutput(true);
+        clearBinStatus();
         break;
       }
 
@@ -297,17 +304,7 @@ void loop() {
 
       //transaction done
       if (l_iActiveTransaction == 0) {
-
-        //reset all values
-        for (uint8_t i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
-          m_zaBinStatus[i] = false;
-          m_straBinId[i] = "";
-          m_straActionCode[i] = "";
-          m_iaActionQty[i] = 0;
-        }
-        m_strTransactionExecution = "";
-        m_zConfirmationStatus = false;
-
+        clearBinStatus();
         //back to IDLE state
         m_iaRtuState = RU_STATE_IDLE;
       }
@@ -601,9 +598,46 @@ bool Client_JsonParseRegisterConfirmation() {
   DeserializationError l_oError = deserializeJson(l_oParsedData, m_strRcvSendBuffer);
 
   if (l_oError == DESERIALIZE_JSON_OK) {
-    // TODO parse and check register confirmation data
+    //Status Data
+    if(l_oParsedData["success"]){
+      //Data Object (10 RU , SKU Name, Bin ID,
+      JsonArray l_oaRegisteredState = l_oParsedData["registered_bin"].as<JsonArray>();
 
-    return true;
+      String l_strIsRtuConnected = "";
+      String l_strRtuRegistered = "";
+
+      //Parsing Array Data For 10 RU
+      for (int i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
+        bool l_zRegisteredState = l_oaRegisteredState[i-1].as<boolean>();
+        //store to global var
+        m_zaRtuRegistered[i] = l_zRegisteredState;
+        //construct string
+        l_strIsRtuConnected += String(m_zaIsRtuConnected[i]);
+        l_strRtuRegistered += String(m_zaRtuRegistered[i]);
+      }
+
+      // check RU status between connected and disconnected device
+      for (int i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
+        /**
+         * | Connected  | Registered  | Remarks
+         * | 0          | 0           | OK, device not exist
+         * | 0          | 1           | NOK, waiting for device to be connected
+         * | 1          | 0           | NOK, waiting for device to be registered
+         * | 1          | 1           | OK, device ready
+         */
+        if (m_zaIsRtuConnected[i] != m_zaRtuRegistered[i]) {
+          //try again in 1 second
+          Serial.println("some device is not connected/registered");
+          Serial.println("Con:"+ l_strIsRtuConnected);
+          Serial.println("Reg:" + l_strRtuRegistered);
+          Lcd_Print("Con:"+ l_strIsRtuConnected, "Reg:" + l_strRtuRegistered);
+          delay(1000);
+          return false;
+        }
+      }
+
+      return true;
+    }
   }
 
   Serial.println("Error Parsing Register Confirmation, error code ");
@@ -629,7 +663,7 @@ bool Client_JsonParseCurrentData() {
 
     //Parsing Array Data For 10 SKU
     for (int i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
-      JsonObject l_oSku = l_oaArrayData[i];
+      JsonObject l_oSku = l_oaArrayData[i - 1];
       String l_strDeviceId = (const char*)l_oSku["device_id"];
       int l_iBinId = l_strDeviceId.substring(3).toInt();
       String l_strSkuName = (const char*)l_oSku["sku_name"];
@@ -669,7 +703,7 @@ bool Client_JsonParseTransactionData() {
       //Parsing Array Transaction Data For x SKU
 
       for (uint8_t i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
-        JsonObject l_oJsonTransactionData = l_oaArrayTransaction[i-1];
+        JsonObject l_oJsonTransactionData = l_oaArrayTransaction[i - 1];
         //Get Local Var
         String l_strBinId = (const char*)l_oJsonTransactionData["device_id"];
         String l_strActionCode = (const char*)l_oJsonTransactionData["action"];
@@ -760,6 +794,19 @@ void printDeserializeJsonErrorCode(DeserializationError p_oError) {
   }
 
   Lcd_PrintCantConnectToRaspi();
+}
+
+void clearBinStatus() {
+
+  //reset all values
+  for (uint8_t i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
+    m_zaBinStatus[i] = false;
+    m_straBinId[i] = "";
+    m_straActionCode[i] = "";
+    m_iaActionQty[i] = 0;
+  }
+  m_strTransactionExecution = "";
+  m_zConfirmationStatus = false;
 }
 
 //Clear Buffer
