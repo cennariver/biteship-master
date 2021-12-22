@@ -85,10 +85,13 @@ const uint8_t  RU_STATE_IDLE                      = RU_STATE_READY + 1;
 const uint8_t  RU_STATE_TRANSACTION_CONFIRMATION  = RU_STATE_IDLE + 1;
 const uint8_t  RU_STATE_TRANSACTION_PICKING       = RU_STATE_TRANSACTION_CONFIRMATION + 1;
 //RU state-register variable
+const uint8_t  LCD_PRINT_UNREGISTERED             = 0;
+const uint8_t  LCD_PRINT_REGISTERING              = LCD_PRINT_UNREGISTERED + 1;
+const uint8_t  LCD_PRINT_REGISTERED               = LCD_PRINT_REGISTERING + 1;
 bool m_zaRtuRegistered[REMOTE_UNIT_AMOUNT] = {NULL,
-                                             false, false, false, false, false,
-                                             false, false, false, false, false
-                                            };
+                                              false, false, false, false, false,
+                                              false, false, false, false, false
+                                             };
 //RU state-ready variable
 String m_straSkuName[REMOTE_UNIT_AMOUNT];
 int m_iaSkuQty[REMOTE_UNIT_AMOUNT];
@@ -230,7 +233,6 @@ void loop() {
         //get request from API transaction data
         if (Client_HttpGetRequest(API_GET_TRANSACTION)) {
           //receive serial data
-          // TODO sometimes it stuck in here
           Serial.println("get request success API_GET_TRANSACTION");
           m_strRcvSendBuffer = Client_ReadSerialData('<', '>');
           if (m_strRcvSendBuffer != "") {
@@ -248,7 +250,6 @@ void loop() {
       }
       break;
 
-    // TODO this switch case is not tested
     case RU_STATE_TRANSACTION_CONFIRMATION:
       //display to LCD: transaction status
       Lcd_PrintTransactionState(false);
@@ -271,7 +272,6 @@ void loop() {
       }
       break;
 
-    // TODO this switch case is not tested
     case RU_STATE_TRANSACTION_PICKING:
       //display to LCD: transaction status and get rtu that need to be done
       uint8_t l_iActiveTransaction = Lcd_PrintTransactionState(true);
@@ -339,35 +339,48 @@ void Lcd_PrintCantConnectToRaspi() {
   delay(1000);
 }
 
-void Lcd_PrintDeviceNotRegistered(uint8_t p_iBinId) {
+void Lcd_PrintDeviceRegisState(uint8_t p_iBinId, uint8_t p_iPrintState) {
+  switch (p_iPrintState) {
+    case LCD_PRINT_UNREGISTERED:
+      Lcd_Print(p_iBinId, "RU: C" + COLLECTOR_IDENTIFIER + "B" + String(p_iBinId), "Unregistered");
+      break;
+    case LCD_PRINT_REGISTERING:
+      Lcd_Print(p_iBinId, "RU: C" + COLLECTOR_IDENTIFIER + "B" + String(p_iBinId), "Registering");
+      break;
+    case LCD_PRINT_REGISTERED:
+      Lcd_Print(p_iBinId, "RU: C" + COLLECTOR_IDENTIFIER + "B" + String(p_iBinId), "Registered");
+      break;
 
-  Lcd_Print(p_iBinId, "RU: C" + COLLECTOR_IDENTIFIER + "B" + String(p_iBinId), "Unregistered");
+    default:
+      Lcd_Print(p_iBinId, "RU: C" + COLLECTOR_IDENTIFIER + "B" + String(p_iBinId), "Unknown");
+      break;
+  }
 }
 
 void Lcd_PrintRegisteringDevice() {
   for (uint8_t i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
-    if (m_zaIsRtuConnected[i]) {
-      Lcd_Print(i, "Registering", "C" + COLLECTOR_IDENTIFIER + "B" + String(i) + " Please Wait");
+    if (m_zaRtuRegistered[i]) {
+      Lcd_PrintDeviceRegisState(i, LCD_PRINT_REGISTERED);
     }
     else {
-      Lcd_PrintDeviceNotRegistered(i);
+      Lcd_PrintDeviceRegisState(i, LCD_PRINT_REGISTERING);
     }
   }
 }
 
 void Lcd_PrintGettingBinData() {
   for (uint8_t i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
-    if (m_zaIsRtuConnected[i]) {
+    if (m_zaRtuRegistered[i]) {
       Lcd_Print(i, "Getting bin data", "C" + COLLECTOR_IDENTIFIER + "B" + String(i) + " Please Wait");
     }
     else {
-      Lcd_PrintDeviceNotRegistered(i);
+      Lcd_PrintDeviceRegisState(i, LCD_PRINT_UNREGISTERED);
     }
   }
 }
 
 void Lcd_PrintCurrentBinData(uint8_t p_iaBinId) {
-  if (m_zaIsRtuConnected[p_iaBinId]) {
+  if (m_zaRtuRegistered[p_iaBinId]) {
     m_oaRtu[p_iaBinId].begin(16, 2);
     m_oaRtu[p_iaBinId].clear();
     m_oaRtu[p_iaBinId].setCursor(0, 0);
@@ -378,17 +391,17 @@ void Lcd_PrintCurrentBinData(uint8_t p_iaBinId) {
     m_oaRtu[p_iaBinId].print("C" + COLLECTOR_IDENTIFIER + "B" + String(p_iaBinId));
   }
   else {
-    Lcd_PrintDeviceNotRegistered(p_iaBinId);
+    Lcd_PrintDeviceRegisState(p_iaBinId, LCD_PRINT_UNREGISTERED);
   }
 }
 
 void Lcd_PrintCurrentBinData() {
   for (uint8_t i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
-    if (m_zaIsRtuConnected[i]) {
+    if (m_zaRtuRegistered[i]) {
       Lcd_PrintCurrentBinData(i);
     }
     else {
-      Lcd_PrintDeviceNotRegistered(i);
+      Lcd_PrintDeviceRegisState(i, LCD_PRINT_UNREGISTERED);
     }
   }
 }
@@ -398,7 +411,7 @@ int Lcd_PrintTransactionState(bool p_bIsExecutionState) {
   int l_iActiveTransaction = 0;
 
   for (uint8_t i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
-    if (m_zaIsRtuConnected[i]) {
+    if (m_zaRtuRegistered[i]) {
       if (m_zaBinStatus[i]) {
         if (p_bIsExecutionState) {
           Serial.println("active transaction bin: " + String(i));
@@ -429,7 +442,7 @@ int Lcd_PrintTransactionState(bool p_bIsExecutionState) {
       }
 
     } else {
-      Lcd_PrintDeviceNotRegistered(i);
+      Lcd_PrintDeviceRegisState(i, LCD_PRINT_UNREGISTERED);
     }
   }
 
@@ -599,7 +612,7 @@ bool Client_JsonParseRegisterConfirmation() {
 
   if (l_oError == DESERIALIZE_JSON_OK) {
     //Status Data
-    if(l_oParsedData["success"]){
+    if (l_oParsedData["success"]) {
       //Data Object (10 RU , SKU Name, Bin ID,
       JsonArray l_oaRegisteredState = l_oParsedData["registered_bin"].as<JsonArray>();
 
@@ -608,7 +621,7 @@ bool Client_JsonParseRegisterConfirmation() {
 
       //Parsing Array Data For 10 RU
       for (int i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
-        bool l_zRegisteredState = l_oaRegisteredState[i-1].as<boolean>();
+        bool l_zRegisteredState = l_oaRegisteredState[i - 1].as<boolean>();
         //store to global var
         m_zaRtuRegistered[i] = l_zRegisteredState;
         //construct string
@@ -619,18 +632,18 @@ bool Client_JsonParseRegisterConfirmation() {
       // check RU status between connected and disconnected device
       for (int i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
         /**
-         * | Connected  | Registered  | Remarks
-         * | 0          | 0           | OK, device not exist
-         * | 0          | 1           | NOK, waiting for device to be connected
-         * | 1          | 0           | NOK, waiting for device to be registered
-         * | 1          | 1           | OK, device ready
-         */
+           | Connected  | Registered  | Remarks
+           | 0          | 0           | OK, device not exist
+           | 0          | 1           | NOK, waiting for device to be connected
+           | 1          | 0           | NOK, waiting for device to be registered
+           | 1          | 1           | OK, device ready
+        */
         if (m_zaIsRtuConnected[i] != m_zaRtuRegistered[i]) {
           //try again in 1 second
           Serial.println("some device is not connected/registered");
-          Serial.println("Con:"+ l_strIsRtuConnected);
+          Serial.println("Con:" + l_strIsRtuConnected);
           Serial.println("Reg:" + l_strRtuRegistered);
-          Lcd_Print("Con:"+ l_strIsRtuConnected, "Reg:" + l_strRtuRegistered);
+          Lcd_Print("Con:" + l_strIsRtuConnected, "Reg:" + l_strRtuRegistered);
           delay(1000);
           return false;
         }
