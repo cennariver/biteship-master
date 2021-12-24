@@ -45,23 +45,23 @@ bool m_zaIsRtuConnected[REMOTE_UNIT_AMOUNT]      = {NULL,
 
 
 /** Wifi */
-//const char    WIFI_SSID[]         = "tamsos blok HG 25A";            // your network m_chaSsid (name)
-//const char    WIFI_PASSWORD[]     = "qwerty123456";        // your network m_chPassword
-//const char    WIFI_SSID[]         = "c7";            // your network m_chaSsid (name)
-//const char    WIFI_PASSWORD[]     = "da645591";        // your network m_chPassword
-//const char    WIFI_SSID[]         = "Warehouse Biteship";            // your network m_chaSsid (name)
-//const char    WIFI_PASSWORD[]     = "Bismilahlancar";        // your network m_chPassword
-//const char    WIFI_SSID[]         = "Diskum_723";            // your network m_chaSsid (name)
+//const char    WIFI_SSID[]         = "tamsos blok HG 25A";
+//const char    WIFI_PASSWORD[]     = "qwerty123456";
+//const char    WIFI_SSID[]         = "c7";
+//const char    WIFI_PASSWORD[]     = "da645591";
+//const char    WIFI_SSID[]         = "Diskum_723";
 //const char    WIFI_PASSWORD[]     = "19283746abcd";
-const char    WIFI_SSID[]         = "LAN";            // your network m_chaSsid (name)
-const char    WIFI_PASSWORD[]     = "LAN43406";
+//const char    WIFI_SSID[]         = "LAN";
+//const char    WIFI_PASSWORD[]     = "LAN43406";
+const char    WIFI_SSID[]         = "Warehouse Biteship";
+const char    WIFI_PASSWORD[]     = "Bismilahlancar";
 const unsigned long WIFI_TIMEOUT  = 5000;
 uint8_t m_iStatus = WL_IDLE_STATUS;
 WiFiEspClient m_oClient;
 
 
 /** Client */
-const String   COLLECTOR_IDENTIFIER            = "2";
+const String   COLLECTOR_IDENTIFIER            = "1";
 const String   API_REGISTER_RU                 = "/ru-registration-collector/" + COLLECTOR_IDENTIFIER;
 const String   API_GET_CURRENT_DATA            = "/get-current-data-by-collector/" + COLLECTOR_IDENTIFIER;
 const String   API_GET_TRANSACTION             = "/get-transaction-by-collector/" + COLLECTOR_IDENTIFIER;
@@ -74,8 +74,8 @@ const int RECEIVED_CHAR_LENGTH         = 1500;
 char m_caReceivedChars[RECEIVED_CHAR_LENGTH];
 String m_strRcvSendBuffer;
 bool m_zNewData = false;
-//const char     HOST_ADDRESS[]  = "192.168.0.6";
-const char     HOST_ADDRESS[]  = "192.168.1.5";
+//const char     HOST_ADDRESS[]  = "192.168.1.6";
+const char     HOST_ADDRESS[]  = "192.168.0.6";
 const int      HOST_PORT       = 3000;
 //rtu state
 uint8_t m_iaRtuState;
@@ -563,7 +563,8 @@ String Client_ReadSerialData(char p_chStartMarker, char p_chEndMarker) {
     if (millis() - l_lLastReadSerialData >= WIFI_TIMEOUT) {
       clearBuffer();
       Lcd_Print("Connection fail", "Try again in 1s");
-      break;
+
+      return "";
     }
   };
 
