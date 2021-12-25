@@ -75,7 +75,7 @@ char m_caReceivedChars[RECEIVED_CHAR_LENGTH];
 String m_strRcvSendBuffer;
 bool m_zNewData = false;
 //const char     HOST_ADDRESS[]  = "192.168.1.6";
-const char     HOST_ADDRESS[]  = "192.168.0.6";
+const char     HOST_ADDRESS[]  = "192.168.0.7";
 const int      HOST_PORT       = 3000;
 //rtu state
 uint8_t m_iaRtuState;
@@ -142,8 +142,7 @@ void setup() {
 
   //set rtu connected state
   setRtuState();
-
-  setLedOutput(true);
+  displayRegisteredDevices();
   clearBinStatus();
 }
 
@@ -187,6 +186,8 @@ void loop() {
           clearBuffer();
         }
       }
+
+      displayRegisteredDevices();
       break;
 
     case RU_STATE_READY:
@@ -208,7 +209,6 @@ void loop() {
 
             //set rtu connected state
             setRtuState();
-            setLedOutput(false);
           }
           clearBuffer();
         }
@@ -223,7 +223,7 @@ void loop() {
       if (isRtuStateChanged() != 0 ||
           buttonWasPressed() != 0) {
         m_iaRtuState = RU_STATE_REGISTRATION;
-        setLedOutput(true);
+        displayRegisteredDevices();
         clearBinStatus();
         break;
       }
@@ -926,12 +926,10 @@ void setRtuState() {
   }
 }
 
-void setLedOutput(bool p_zOutput) {
+void displayRegisteredDevices() {
 
   for (uint8_t i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
 
-    if (m_zaIsRtuConnected[i] == true) {
-      digitalWrite(PIN_LED[i], p_zOutput ? HIGH : LOW);
-    }
+      digitalWrite(PIN_LED[i], m_zaRtuRegistered[i] ? LOW: HIGH);
   }
 }
