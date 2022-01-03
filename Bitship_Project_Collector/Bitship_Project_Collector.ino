@@ -51,17 +51,17 @@ bool m_zaIsRtuConnected[REMOTE_UNIT_AMOUNT]      = {NULL,
 //const char    WIFI_PASSWORD[]     = "da645591";
 //const char    WIFI_SSID[]         = "Diskum_723";
 //const char    WIFI_PASSWORD[]     = "19283746abcd";
-//const char    WIFI_SSID[]         = "LAN";
-//const char    WIFI_PASSWORD[]     = "LAN43406";
-const char    WIFI_SSID[]         = "Warehouse Biteship";
-const char    WIFI_PASSWORD[]     = "Bismilahlancar";
+const char    WIFI_SSID[]         = "LAN";
+const char    WIFI_PASSWORD[]     = "LAN43406";
+//const char    WIFI_SSID[]         = "Warehouse Biteship";
+//const char    WIFI_PASSWORD[]     = "Bismilahlancar";
 const unsigned long WIFI_TIMEOUT  = 5000;
 uint8_t m_iStatus = WL_IDLE_STATUS;
 WiFiEspClient m_oClient;
 
 
 /** Client */
-const String   COLLECTOR_IDENTIFIER            = "1";
+const String   COLLECTOR_IDENTIFIER            = "2";
 const String   API_REGISTER_RU                 = "/ru-registration-collector/" + COLLECTOR_IDENTIFIER;
 const String   API_GET_CURRENT_DATA            = "/get-current-data-by-collector/" + COLLECTOR_IDENTIFIER;
 const String   API_GET_TRANSACTION             = "/get-transaction-by-collector/" + COLLECTOR_IDENTIFIER;
@@ -74,8 +74,8 @@ const int RECEIVED_CHAR_LENGTH         = 1500;
 char m_caReceivedChars[RECEIVED_CHAR_LENGTH];
 String m_strRcvSendBuffer;
 bool m_zNewData = false;
-//const char     HOST_ADDRESS[]  = "192.168.1.6";
-const char     HOST_ADDRESS[]  = "192.168.0.7";
+const char     HOST_ADDRESS[]  = "192.168.1.7";
+//const char     HOST_ADDRESS[]  = "192.168.0.7";
 const int      HOST_PORT       = 3000;
 //rtu state
 uint8_t m_iaRtuState;
@@ -85,13 +85,15 @@ const uint8_t  RU_STATE_IDLE                      = RU_STATE_READY + 1;
 const uint8_t  RU_STATE_TRANSACTION_CONFIRMATION  = RU_STATE_IDLE + 1;
 const uint8_t  RU_STATE_TRANSACTION_PICKING       = RU_STATE_TRANSACTION_CONFIRMATION + 1;
 //RU state-register variable
-const uint8_t  LCD_PRINT_UNREGISTERED             = 0;
+const uint8_t  LCD_PRINT_GET_MAC                  = 0;
+const uint8_t  LCD_PRINT_UNREGISTERED             = LCD_PRINT_GET_MAC + 1;
 const uint8_t  LCD_PRINT_REGISTERING              = LCD_PRINT_UNREGISTERED + 1;
 const uint8_t  LCD_PRINT_REGISTERED               = LCD_PRINT_REGISTERING + 1;
 bool m_zaRtuRegistered[REMOTE_UNIT_AMOUNT] = {NULL,
                                               false, false, false, false, false,
                                               false, false, false, false, false
                                              };
+String m_strRaspiMacAddress = "";
 //RU state-ready variable
 String m_straSkuName[REMOTE_UNIT_AMOUNT];
 int m_iaSkuQty[REMOTE_UNIT_AMOUNT];
@@ -161,7 +163,11 @@ void loop() {
 
     case RU_STATE_REGISTRATION:
       //display to LCD: registering device
-      Lcd_PrintRegisteringDevice();
+      if(m_strRaspiMacAddress == ""){
+        Lcd_PrintGetMacAddress();
+      }else{
+        Lcd_PrintRegisteringDevice();
+      }
 
       //construct registering device in json format
       m_strRcvSendBuffer = "{\"collector\": " + COLLECTOR_IDENTIFIER + ", \"status\": [";
@@ -340,19 +346,26 @@ void Lcd_PrintCantConnectToRaspi() {
 }
 
 void Lcd_PrintDeviceRegisState(uint8_t p_iBinId, uint8_t p_iPrintState) {
+
+  String l_strDeviceId = "C" + COLLECTOR_IDENTIFIER + "B" + String(p_iBinId) + "-" + m_strRaspiMacAddress;
+  String l_strDeviceIdRest = splitLcdDisplayString(l_strDeviceId);
+
   switch (p_iPrintState) {
+    case LCD_PRINT_GET_MAC:
+      Lcd_Print(p_iBinId, "Get Raspi Mac", "Address <C" + COLLECTOR_IDENTIFIER + "B" + String(p_iBinId) + ">");
+      break;
     case LCD_PRINT_UNREGISTERED:
-      Lcd_Print(p_iBinId, "RU: C" + COLLECTOR_IDENTIFIER + "B" + String(p_iBinId), "Unregistered");
+      Lcd_Print(p_iBinId, l_strDeviceId, l_strDeviceIdRest + "  <X>");
       break;
     case LCD_PRINT_REGISTERING:
-      Lcd_Print(p_iBinId, "RU: C" + COLLECTOR_IDENTIFIER + "B" + String(p_iBinId), "Registering");
+      Lcd_Print(p_iBinId, l_strDeviceId, l_strDeviceIdRest + "  <V>");
       break;
     case LCD_PRINT_REGISTERED:
-      Lcd_Print(p_iBinId, "RU: C" + COLLECTOR_IDENTIFIER + "B" + String(p_iBinId), "Registered");
+      Lcd_Print(p_iBinId, l_strDeviceId, l_strDeviceIdRest + "  <VV>");
       break;
 
     default:
-      Lcd_Print(p_iBinId, "RU: C" + COLLECTOR_IDENTIFIER + "B" + String(p_iBinId), "Unknown");
+      Lcd_Print(p_iBinId, l_strDeviceId, l_strDeviceIdRest + "  <?>");
       break;
   }
 }
@@ -365,6 +378,12 @@ void Lcd_PrintRegisteringDevice() {
     else {
       Lcd_PrintDeviceRegisState(i, LCD_PRINT_REGISTERING);
     }
+  }
+}
+
+void Lcd_PrintGetMacAddress() {
+  for (uint8_t i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
+    Lcd_PrintDeviceRegisState(i, LCD_PRINT_GET_MAC);
   }
 }
 
@@ -616,7 +635,7 @@ bool Client_JsonParseRegisterConfirmation() {
     if (l_oParsedData["success"]) {
       //Data Object (10 RU , SKU Name, Bin ID,
       JsonArray l_oaRegisteredState = l_oParsedData["registered_bin"].as<JsonArray>();
-
+      m_strRaspiMacAddress = (const char*)l_oParsedData["mac_address"];
       String l_strIsRtuConnected = "";
       String l_strRtuRegistered = "";
 
@@ -679,7 +698,7 @@ bool Client_JsonParseCurrentData() {
     for (int i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
       JsonObject l_oSku = l_oaArrayData[i - 1];
       String l_strDeviceId = (const char*)l_oSku["device_id"];
-      int l_iBinId = l_strDeviceId.substring(3).toInt();
+      int l_iBinId = l_strDeviceId.substring(3,4).toInt();
       String l_strSkuName = (const char*)l_oSku["sku_name"];
       int l_iSkuQty = (int)l_oSku["quantity"];
 
@@ -723,7 +742,7 @@ bool Client_JsonParseTransactionData() {
         String l_strActionCode = (const char*)l_oJsonTransactionData["action"];
         int l_iActionQty = (int)l_oJsonTransactionData["quantity"];
         //Decode bin ID
-        int l_iBinId = l_strBinId.substring(3).toInt();
+        int l_iBinId = l_strBinId.substring(3,4).toInt();
         // int ll_bin_id = l_oaJsonTransactionData["bin_id"];
 
         // save to global variable
@@ -932,4 +951,12 @@ void displayRegisteredDevices() {
 
       digitalWrite(PIN_LED[i], m_zaRtuRegistered[i] ? LOW: HIGH);
   }
+}
+
+String splitLcdDisplayString(String p_strFullString){
+  if (p_strFullString.length() > 16) {
+    return p_strFullString.substring(16);
+  }
+
+  return "";
 }
