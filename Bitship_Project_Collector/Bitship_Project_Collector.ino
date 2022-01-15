@@ -355,17 +355,17 @@ void Lcd_PrintDeviceRegisState(uint8_t p_iBinId, uint8_t p_iPrintState) {
       Lcd_Print(p_iBinId, "Get Raspi Mac", "Address <C" + COLLECTOR_IDENTIFIER + "B" + String(p_iBinId) + ">");
       break;
     case LCD_PRINT_UNREGISTERED:
-      Lcd_Print(p_iBinId, l_strDeviceId, l_strDeviceIdRest + "  <X>");
+      Lcd_Print(p_iBinId, l_strDeviceId, l_strDeviceIdRest + "  <?>");
       break;
     case LCD_PRINT_REGISTERING:
-      Lcd_Print(p_iBinId, l_strDeviceId, l_strDeviceIdRest + "  <.>");
+      Lcd_Print(p_iBinId, l_strDeviceId, l_strDeviceIdRest + "  <!>");
       break;
     case LCD_PRINT_REGISTERED:
       Lcd_Print(p_iBinId, l_strDeviceId, l_strDeviceIdRest + "  <V>");
       break;
 
     default:
-      Lcd_Print(p_iBinId, l_strDeviceId, l_strDeviceIdRest + "  <?>");
+      Lcd_Print(p_iBinId, l_strDeviceId, l_strDeviceIdRest + "  <Err>");
       break;
   }
 }
