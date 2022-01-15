@@ -74,8 +74,8 @@ const int RECEIVED_CHAR_LENGTH         = 1500;
 char m_caReceivedChars[RECEIVED_CHAR_LENGTH];
 String m_strRcvSendBuffer;
 bool m_zNewData = false;
-const char     HOST_ADDRESS[]  = "192.168.1.7";
-//const char     HOST_ADDRESS[]  = "192.168.0.7";
+//const char     HOST_ADDRESS[]  = "192.168.1.7";
+const char     HOST_ADDRESS[]  = "192.168.0.7";
 const int      HOST_PORT       = 3000;
 //rtu state
 uint8_t m_iaRtuState;
