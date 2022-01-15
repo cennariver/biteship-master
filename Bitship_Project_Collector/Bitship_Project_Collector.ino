@@ -51,10 +51,10 @@ bool m_zaIsRtuConnected[REMOTE_UNIT_AMOUNT]      = {NULL,
 //const char    WIFI_PASSWORD[]     = "da645591";
 //const char    WIFI_SSID[]         = "Diskum_723";
 //const char    WIFI_PASSWORD[]     = "19283746abcd";
-const char    WIFI_SSID[]         = "LAN";
-const char    WIFI_PASSWORD[]     = "LAN43406";
-//const char    WIFI_SSID[]         = "Warehouse Biteship";
-//const char    WIFI_PASSWORD[]     = "Bismilahlancar";
+//const char    WIFI_SSID[]         = "LAN";
+//const char    WIFI_PASSWORD[]     = "LAN43406";
+const char    WIFI_SSID[]         = "Warehouse Biteship";
+const char    WIFI_PASSWORD[]     = "Bismilahlancar";
 const unsigned long WIFI_TIMEOUT  = 5000;
 uint8_t m_iStatus = WL_IDLE_STATUS;
 WiFiEspClient m_oClient;
@@ -358,10 +358,10 @@ void Lcd_PrintDeviceRegisState(uint8_t p_iBinId, uint8_t p_iPrintState) {
       Lcd_Print(p_iBinId, l_strDeviceId, l_strDeviceIdRest + "  <X>");
       break;
     case LCD_PRINT_REGISTERING:
-      Lcd_Print(p_iBinId, l_strDeviceId, l_strDeviceIdRest + "  <V>");
+      Lcd_Print(p_iBinId, l_strDeviceId, l_strDeviceIdRest + "  <.>");
       break;
     case LCD_PRINT_REGISTERED:
-      Lcd_Print(p_iBinId, l_strDeviceId, l_strDeviceIdRest + "  <VV>");
+      Lcd_Print(p_iBinId, l_strDeviceId, l_strDeviceIdRest + "  <V>");
       break;
 
     default:
