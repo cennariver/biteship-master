@@ -51,10 +51,10 @@ bool m_zaIsRtuConnected[REMOTE_UNIT_AMOUNT]      = {NULL,
 //const char    WIFI_PASSWORD[]     = "da645591";
 //const char    WIFI_SSID[]         = "Diskum_723";
 //const char    WIFI_PASSWORD[]     = "19283746abcd";
-//const char    WIFI_SSID[]         = "LAN";
-//const char    WIFI_PASSWORD[]     = "LAN43406";
-const char    WIFI_SSID[]         = "Warehouse Biteship";
-const char    WIFI_PASSWORD[]     = "Bismilahlancar";
+const char    WIFI_SSID[]         = "LAN";
+const char    WIFI_PASSWORD[]     = "LAN43406";
+//const char    WIFI_SSID[]         = "Warehouse Biteship";
+//const char    WIFI_PASSWORD[]     = "Bismilahlancar";
 const unsigned long WIFI_TIMEOUT  = 5000;
 uint8_t m_iStatus = WL_IDLE_STATUS;
 WiFiEspClient m_oClient;
@@ -74,8 +74,8 @@ const int RECEIVED_CHAR_LENGTH         = 1500;
 char m_caReceivedChars[RECEIVED_CHAR_LENGTH];
 String m_strRcvSendBuffer;
 bool m_zNewData = false;
-//const char     HOST_ADDRESS[]  = "192.168.1.7";
-const char     HOST_ADDRESS[]  = "192.168.0.7";
+const char     HOST_ADDRESS[]  = "192.168.1.8";
+//const char     HOST_ADDRESS[]  = "192.168.0.4";
 const int      HOST_PORT       = 3000;
 //rtu state
 uint8_t m_iaRtuState;
@@ -347,25 +347,34 @@ void Lcd_PrintCantConnectToRaspi() {
 
 void Lcd_PrintDeviceRegisState(uint8_t p_iBinId, uint8_t p_iPrintState) {
 
-  String l_strDeviceId = "C" + COLLECTOR_IDENTIFIER + "B" + String(p_iBinId) + "-" + m_strRaspiMacAddress;
-  String l_strDeviceIdRest = splitLcdDisplayString(l_strDeviceId);
-
   switch (p_iPrintState) {
     case LCD_PRINT_GET_MAC:
       Lcd_Print(p_iBinId, "Get Raspi Mac", "Address <C" + COLLECTOR_IDENTIFIER + "B" + String(p_iBinId) + ">");
       break;
-    case LCD_PRINT_UNREGISTERED:
-      Lcd_Print(p_iBinId, l_strDeviceId, l_strDeviceIdRest + "  <?>");
-      break;
-    case LCD_PRINT_REGISTERING:
-      Lcd_Print(p_iBinId, l_strDeviceId, l_strDeviceIdRest + "  <!>");
-      break;
-    case LCD_PRINT_REGISTERED:
-      Lcd_Print(p_iBinId, l_strDeviceId, l_strDeviceIdRest + "  <V>");
-      break;
 
+    case LCD_PRINT_UNREGISTERED:
+    case LCD_PRINT_REGISTERING:
+    case LCD_PRINT_REGISTERED:
     default:
-      Lcd_Print(p_iBinId, l_strDeviceId, l_strDeviceIdRest + "  <Err>");
+
+      String l_strPrintState = "";
+
+      if (p_iPrintState == LCD_PRINT_UNREGISTERED) {
+        l_strPrintState = "<?>";
+      }else if (p_iPrintState == LCD_PRINT_UNREGISTERED) {
+        l_strPrintState = "<!>";
+      }else if (p_iPrintState == LCD_PRINT_REGISTERED){
+        l_strPrintState = "<V>";
+      }else{
+        l_strPrintState = "<Err>";
+      }
+
+      String l_strDeviceId = "C" + COLLECTOR_IDENTIFIER + "B" + String(p_iBinId);
+      String l_strMacFirst = m_strRaspiMacAddress.substring(0, 8);
+      String l_strMacLast = m_strRaspiMacAddress.substring(9);
+
+
+      Lcd_Print(p_iBinId, l_strMacFirst + "  " + l_strDeviceId, l_strMacLast + "  " + l_strPrintState);
       break;
   }
 }
@@ -951,12 +960,4 @@ void displayRegisteredDevices() {
 
       digitalWrite(PIN_LED[i], m_zaRtuRegistered[i] ? LOW: HIGH);
   }
-}
-
-String splitLcdDisplayString(String p_strFullString){
-  if (p_strFullString.length() > 16) {
-    return p_strFullString.substring(16);
-  }
-
-  return "";
 }
