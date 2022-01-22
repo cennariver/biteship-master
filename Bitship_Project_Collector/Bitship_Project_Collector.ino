@@ -74,7 +74,7 @@ const int RECEIVED_CHAR_LENGTH         = 1500;
 char m_caReceivedChars[RECEIVED_CHAR_LENGTH];
 String m_strRcvSendBuffer;
 bool m_zNewData = false;
-const char     HOST_ADDRESS[]  = "192.168.1.8";
+const char     HOST_ADDRESS[]  = "192.168.1.7";
 //const char     HOST_ADDRESS[]  = "192.168.0.4";
 const int      HOST_PORT       = 3000;
 //rtu state
@@ -95,6 +95,8 @@ bool m_zaRtuRegistered[REMOTE_UNIT_AMOUNT] = {NULL,
                                              };
 String m_strRaspiMacAddress = "";
 //RU state-ready variable
+const unsigned long  PERIOD_TIME_POST_CONNECTED_DEVICE = 6000;
+unsigned long m_lLastPostConnectedDeviceApi = 0;
 String m_straSkuName[REMOTE_UNIT_AMOUNT];
 int m_iaSkuQty[REMOTE_UNIT_AMOUNT];
 //RU state-idle variable
@@ -111,7 +113,6 @@ String m_strTransactionExecution;
 bool m_zConfirmationStatus = false;
 
 /** Others */
-unsigned long m_ulCurrentMillis;
 const uint8_t     DESERIALIZE_JSON_OK                 = 0;
 const uint8_t     DESERIALIZE_JSON_EMPTY_INPUT        = 1;
 const uint8_t     DESERIALIZE_JSON_INCOMPLETE_OUTPUT  = 2;
@@ -150,7 +151,6 @@ void setup() {
 
 void loop() {
 
-  m_ulCurrentMillis = millis();
   Serial.println("WiFi:" + ((WiFi.status() == WL_CONNECTED) ? "WL_CONNECTED" : String(WiFi.status())) + " | RTU:" + String(m_iaRtuState));
 
   //handling disconnected wifi
@@ -169,28 +169,34 @@ void loop() {
         Lcd_PrintRegisteringDevice();
       }
 
-      //construct registering device in json format
-      m_strRcvSendBuffer = "{\"collector\": " + COLLECTOR_IDENTIFIER + ", \"status\": [";
-      for (uint8_t i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
-        m_strRcvSendBuffer += (i != (REMOTE_UNIT_AMOUNT - 1)) ? (String)m_zaIsRtuConnected[i] + "," : (String)m_zaIsRtuConnected[i];
-      }
-      m_strRcvSendBuffer += "]}";
+      //post request every specific period
+      if (millis() - m_lLastPostConnectedDeviceApi >= PERIOD_TIME_POST_CONNECTED_DEVICE) {
 
-      //post request to API register
-      if (Client_HttpPostRequest(API_REGISTER_RU, m_strRcvSendBuffer)) {
-        //receive serial data
-        Serial.println("post request success API_REGISTER_RU");
-        m_strRcvSendBuffer = Client_ReadSerialData('<', '>');
-        if (m_strRcvSendBuffer != "") {
-          //parsed confirmation data
-          Serial.println("some data available");
-          if (Client_JsonParseRegisterConfirmation()) {
-            //continue to ready state
-            Serial.println("registered");
-            m_iaRtuState = RU_STATE_READY;
-          }
-          clearBuffer();
+        //construct registering device in json format
+        m_strRcvSendBuffer = "{\"collector\": " + COLLECTOR_IDENTIFIER + ", \"status\": [";
+        for (uint8_t i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
+          m_strRcvSendBuffer += (i != (REMOTE_UNIT_AMOUNT - 1)) ? (String)m_zaIsRtuConnected[i] + "," : (String)m_zaIsRtuConnected[i];
         }
+        m_strRcvSendBuffer += "]}";
+
+        //post request to API register
+        if (Client_HttpPostRequest(API_REGISTER_RU, m_strRcvSendBuffer)) {
+          //receive serial data
+          Serial.println("post request success API_REGISTER_RU");
+          m_strRcvSendBuffer = Client_ReadSerialData('<', '>');
+          if (m_strRcvSendBuffer != "") {
+            //parsed confirmation data
+            Serial.println("some data available");
+            if (Client_JsonParseRegisterConfirmation()) {
+              //continue to ready state
+              Serial.println("registered");
+              m_iaRtuState = RU_STATE_READY;
+            }
+            clearBuffer();
+          }
+        }
+
+        m_lLastPostConnectedDeviceApi = millis();
       }
 
       displayRegisteredDevices();
@@ -234,8 +240,8 @@ void loop() {
         break;
       }
 
-      //request every specific period
-      if (m_ulCurrentMillis - m_lLastGetActiveTransactionApi >= PERIOD_TIME_GET_ACTIVE_TRANSACTION) {
+      //get request every specific period
+      if (millis() - m_lLastGetActiveTransactionApi >= PERIOD_TIME_GET_ACTIVE_TRANSACTION) {
         //get request from API transaction data
         if (Client_HttpGetRequest(API_GET_TRANSACTION)) {
           //receive serial data
@@ -252,7 +258,7 @@ void loop() {
             clearBuffer();
           }
         }
-        m_lLastGetActiveTransactionApi = m_ulCurrentMillis;
+        m_lLastGetActiveTransactionApi = millis();
       }
       break;
 
@@ -361,7 +367,7 @@ void Lcd_PrintDeviceRegisState(uint8_t p_iBinId, uint8_t p_iPrintState) {
 
       if (p_iPrintState == LCD_PRINT_UNREGISTERED) {
         l_strPrintState = "<?>";
-      }else if (p_iPrintState == LCD_PRINT_UNREGISTERED) {
+      }else if (p_iPrintState == LCD_PRINT_REGISTERING) {
         l_strPrintState = "<!>";
       }else if (p_iPrintState == LCD_PRINT_REGISTERED){
         l_strPrintState = "<V>";
