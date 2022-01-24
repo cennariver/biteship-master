@@ -646,46 +646,51 @@ bool Client_JsonParseRegisterConfirmation() {
   DeserializationError l_oError = deserializeJson(l_oParsedData, m_strRcvSendBuffer);
 
   if (l_oError == DESERIALIZE_JSON_OK) {
-    //Status Data
-    if (l_oParsedData["success"]) {
-      //Data Object (10 RU , SKU Name, Bin ID,
-      JsonArray l_oaRegisteredState = l_oParsedData["registered_bin"].as<JsonArray>();
-      m_strRaspiMacAddress = (const char*)l_oParsedData["mac_address"];
-      String l_strIsRtuConnected = "";
-      String l_strRtuRegistered = "";
 
-      //Parsing Array Data For 10 RU
-      for (int i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
-        bool l_zRegisteredState = l_oaRegisteredState[i - 1].as<boolean>();
-        //store to global var
-        m_zaRtuRegistered[i] = l_zRegisteredState;
-        //construct string
-        l_strIsRtuConnected += String(m_zaIsRtuConnected[i]);
-        l_strRtuRegistered += String(m_zaRtuRegistered[i]);
-      }
-
-      // check RU status between connected and disconnected device
-      for (int i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
-        /**
-           | Connected  | Registered  | Remarks
-           | 0          | 0           | OK, device not exist
-           | 0          | 1           | NOK, waiting for device to be connected
-           | 1          | 0           | NOK, waiting for device to be registered
-           | 1          | 1           | OK, device ready
-        */
-        if (m_zaIsRtuConnected[i] != m_zaRtuRegistered[i]) {
-          //try again in 1 second
-          Serial.println("some device is not connected/registered");
-          Serial.println("Con:" + l_strIsRtuConnected);
-          Serial.println("Reg:" + l_strRtuRegistered);
-          Lcd_Print("Con:" + l_strIsRtuConnected, "Reg:" + l_strRtuRegistered);
-          delay(1000);
-          return false;
-        }
-      }
-
-      return true;
+    //Status Data NOK
+    if (!l_oParsedData["success"]) {
+      return false;
     }
+
+    //Status Data OK
+
+    //Data Object (10 RU , SKU Name, Bin ID,
+    JsonArray l_oaRegisteredState = l_oParsedData["registered_bin"].as<JsonArray>();
+    m_strRaspiMacAddress = (const char*)l_oParsedData["mac_address"];
+    String l_strIsRtuConnected = "";
+    String l_strRtuRegistered = "";
+
+    //Parsing Array Data For 10 RU
+    for (int i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
+      bool l_zRegisteredState = l_oaRegisteredState[i - 1].as<boolean>();
+      //store to global var
+      m_zaRtuRegistered[i] = l_zRegisteredState;
+      //construct string
+      l_strIsRtuConnected += String(m_zaIsRtuConnected[i]);
+      l_strRtuRegistered += String(m_zaRtuRegistered[i]);
+    }
+
+    // check RU status between connected and disconnected device
+    for (int i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
+      /**
+         | Connected  | Registered  | Remarks
+         | 0          | 0           | OK, device not exist
+         | 0          | 1           | NOK, waiting for device to be connected
+         | 1          | 0           | NOK, waiting for device to be registered
+         | 1          | 1           | OK, device ready
+      */
+      if (m_zaIsRtuConnected[i] != m_zaRtuRegistered[i]) {
+        //try again in 1 second
+        Serial.println("some device is not connected/registered");
+        Serial.println("Con:" + l_strIsRtuConnected);
+        Serial.println("Reg:" + l_strRtuRegistered);
+        Lcd_Print("Con:" + l_strIsRtuConnected, "Reg:" + l_strRtuRegistered);
+        delay(1000);
+        return false;
+      }
+    }
+
+    return true;
   }
 
   Serial.println("Error Parsing Register Confirmation, error code ");
@@ -699,9 +704,13 @@ bool Client_JsonParseCurrentData() {
   DeserializationError l_oError = deserializeJson(l_oDoc, m_strRcvSendBuffer);
 
   if (l_oError == DESERIALIZE_JSON_OK) {
-    //Status Data
-    bool l_zStatus = l_oDoc["success"];
 
+    //Status Data NOK
+    if (!l_oDoc["success"]) {
+      return false;
+    }
+
+    //Status Data OK
     //Function Code
     String l_strMessage = l_oDoc["message"];
 
@@ -732,42 +741,41 @@ bool Client_JsonParseCurrentData() {
 
 //Parsing transaction data
 bool Client_JsonParseTransactionData() {
-  bool l_zStatus = false;
   StaticJsonDocument<RECEIVED_CHAR_LENGTH> l_oParsedData;
   DeserializationError l_oError = deserializeJson(l_oParsedData, m_strRcvSendBuffer);
 
   if (l_oError == DESERIALIZE_JSON_OK) {
-    //Parsing the Data And Move to Global Var
-    //Transaction_Status
-    l_zStatus = l_oParsedData["success"];
-
-    if (l_zStatus == true) {
-      Serial.print("trans Stat : ");
-      Serial.println(l_zStatus);
-      //Transaction_id
-      m_strTransactionId = (const char*)l_oParsedData["transaction_id"];
-      //Data Array ( x Transaction Bin )
-      JsonArray l_oaArrayTransaction = l_oParsedData["data"].as<JsonArray>();
-      //Parsing Array Transaction Data For x SKU
-
-      for (uint8_t i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
-        JsonObject l_oJsonTransactionData = l_oaArrayTransaction[i - 1];
-        //Get Local Var
-        String l_strBinId = (const char*)l_oJsonTransactionData["device_id"];
-        String l_strActionCode = (const char*)l_oJsonTransactionData["action"];
-        int l_iActionQty = (int)l_oJsonTransactionData["quantity"];
-        //Decode bin ID
-        int l_iBinId = l_strBinId.substring(3,4).toInt();
-        // int ll_bin_id = l_oaJsonTransactionData["bin_id"];
-
-        // save to global variable
-        m_zaBinStatus[l_iBinId] = true;
-        m_straBinId[l_iBinId] = l_strBinId;
-        m_straActionCode[l_iBinId] = l_strActionCode;
-        m_iaActionQty[l_iBinId] = l_iActionQty;
-      }
+    //Transaction_Status NOK
+    if (!l_oParsedData["success"]) {
+      return false;
     }
-    return l_zStatus;
+
+    //Transaction_Status OK
+    //Parsing the Data And Move to Global Var
+
+    //Transaction_id
+    m_strTransactionId = (const char*)l_oParsedData["transaction_id"];
+    //Data Array ( x Transaction Bin )
+    JsonArray l_oaArrayTransaction = l_oParsedData["data"].as<JsonArray>();
+    //Parsing Array Transaction Data For x SKU
+
+    for (uint8_t i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
+      JsonObject l_oJsonTransactionData = l_oaArrayTransaction[i - 1];
+      //Get Local Var
+      String l_strBinId = (const char*)l_oJsonTransactionData["device_id"];
+      String l_strActionCode = (const char*)l_oJsonTransactionData["action"];
+      int l_iActionQty = (int)l_oJsonTransactionData["quantity"];
+      //Decode bin ID
+      int l_iBinId = l_strBinId.substring(3,4).toInt();
+      // int ll_bin_id = l_oaJsonTransactionData["bin_id"];
+
+      // save to global variable
+      m_zaBinStatus[l_iBinId] = true;
+      m_straBinId[l_iBinId] = l_strBinId;
+      m_straActionCode[l_iBinId] = l_strActionCode;
+      m_iaActionQty[l_iBinId] = l_iActionQty;
+    }
+    return true;
   }
 
   Serial.println("Error Parsing Transaction Data, error code ");
@@ -781,8 +789,14 @@ bool Client_JsonParseTransactionConfirmation() {
   DeserializationError l_oError = deserializeJson(l_oParsedData, m_strRcvSendBuffer);
 
   if (l_oError == DESERIALIZE_JSON_OK) {
+    //Transaction_Status NOK
+    if (!l_oParsedData["success"]) {
+      return false;
+    }
+
+    //Transaction_Status OK
     //Parsing the Data And Move to Global Var
-    //Transaction_Status
+
     JsonObject l_oJsonTransactionData = l_oParsedData["data"];
     m_strTransactionExecution = (const char*)l_oJsonTransactionData["status"];
 
@@ -799,8 +813,14 @@ bool Client_JsonParsePickingsConfirmation(int p_iBinIds) {
   DeserializationError l_oError = deserializeJson(l_oParsedData, m_strRcvSendBuffer);
 
   if (l_oError == DESERIALIZE_JSON_OK) {
+    //Transaction_Status NOK
+    if (!l_oParsedData["success"]) {
+      return false;
+    }
+
+    //Transaction_Status OK
     //Parsing the Data And Move to Global Var
-    //Transaction_Status
+
     bool l_zTransStatus = l_oParsedData["success"];
     m_zConfirmationStatus = l_zTransStatus;
 
