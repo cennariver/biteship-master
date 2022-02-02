@@ -767,7 +767,6 @@ bool Client_JsonParseTransactionData() {
       int l_iActionQty = (int)l_oJsonTransactionData["quantity"];
       //Decode bin ID
       int l_iBinId = l_strBinId.substring(3,4).toInt();
-      // int ll_bin_id = l_oaJsonTransactionData["bin_id"];
 
       // save to global variable
       m_zaBinStatus[l_iBinId] = true;
@@ -794,13 +793,32 @@ bool Client_JsonParseTransactionConfirmation() {
       return false;
     }
 
-    //Transaction_Status OK
+    //Transaction_Status ongoing
     //Parsing the Data And Move to Global Var
+    m_strTransactionExecution = (const char*)l_oParsedData["status"];
+    if(m_strTransactionExecution == "ongoing"){
+      Serial.println(m_strTransactionExecution);
 
-    JsonObject l_oJsonTransactionData = l_oParsedData["data"];
-    m_strTransactionExecution = (const char*)l_oJsonTransactionData["status"];
+      JsonArray l_oaArrayTransaction = l_oParsedData["data"].as<JsonArray>();
 
-    return true;
+      for (uint8_t i = 1; i < REMOTE_UNIT_AMOUNT; i++) {
+        JsonObject l_oJsonTransactionData = l_oaArrayTransaction[i - 1];
+        //Get Local Var
+        String l_strBinId = (const char*)l_oJsonTransactionData["device_id"];
+        String l_strActionCode = (const char*)l_oJsonTransactionData["action"];
+        int l_iActionQty = (int)l_oJsonTransactionData["quantity"];
+        //Decode bin ID
+        int l_iBinId = l_strBinId.substring(3,4).toInt();
+
+        // save to global variable
+        m_zaBinStatus[l_iBinId] = true;
+        m_straBinId[l_iBinId] = l_strBinId;
+        m_straActionCode[l_iBinId] = l_strActionCode;
+        m_iaActionQty[l_iBinId] = l_iActionQty;
+      }
+
+      return true;
+    }
   }
 
   Serial.println("Error Parsing Transaction Confirmation, error code ");
